@@ -460,6 +460,11 @@ static BOOL init_window_call_params( struct win_proc_params *params, HWND hwnd, 
     return TRUE;
 }
 
+#ifdef __wasm__ /* wineweb: the in-module guest-call primitive (patch 0023) */
+extern unsigned int wineweb_guest_call( unsigned int proc, unsigned int hwnd, unsigned int msg,
+                                        unsigned int wparam, unsigned int lparam );
+#endif
+
 static LRESULT dispatch_win_proc_params( struct win_proc_params *params, size_t size,
                                          void **client_ret, size_t *client_ret_size )
 {
@@ -469,6 +474,17 @@ static LRESULT dispatch_win_proc_params( struct win_proc_params *params, size_t 
     ULONG ret_len;
     NTSTATUS status;
 
+#ifdef __wasm__ /* wineweb: the in-module guest-call primitive (patch 0023) */
+    if (thread_info->msg_call_depth > MAX_WINPROC_RECURSION) return 0;
+    thread_info->msg_call_depth++;
+    if (params->ansi_dst)
+        WARN( "wineweb: ansi WndProc dispatch reached (loud)\n" );
+    else
+        result = wineweb_guest_call( (UINT_PTR)params->procW, (UINT_PTR)params->hwnd,
+                                     params->msg, params->wparam, params->lparam );
+    thread_info->msg_call_depth--;
+    return result;
+#endif
     if (thread_info->msg_call_depth > MAX_WINPROC_RECURSION) return 0;
     thread_info->msg_call_depth++;
     status = KeUserModeCallback( NtUserCallWinProc, params, size, &ret_ptr, &ret_len );

@@ -1,0 +1,276 @@
+/*
+ * wineweb_driver.c — the wineweb.drv wasm driver adapter (P3.8, the notepad
+ * capstone; docs/spikes/p3-notepad-demo.md T2).
+ *
+ * What owns this: the P3.8 block. What it must never do: re-implement GDI or
+ * USER semantics (the DIB engine and the window code stay win32u's — this
+ * file only bridges the `struct user_driver_funcs` contract to the
+ * `wineweb_drv` C ABI v1 host half), allocate guest memory outside the
+ * surface DIBs win32u owns, or block (present is an explicit frame push).
+ *
+ * Scope (the notepad surface): window create/destroy/text/show, the window
+ * surface (32bpp top-down DIB the DIB engine draws into, flushed to the host
+ * compositor as RGBA sub-rects), and the font8x8 bitmap font backend
+ * (wineweb_font_backend). Everything else is a loud stub — named, logged
+ * once, and returning the failure value; the spike doc's residue table lists
+ * the ones the T-tier paths actually reach.
+ *
+ * Byte-order note: the DIB engine's 32bpp format is 0x00RRGGBB in a little-
+ * endian DWORD (bytes B,G,R,0); the compositor is RGBA8888. The flush pass
+ * swaps channels and forces alpha 255 over the dirty rect — the one place
+ * the two formats meet.
+ */
+
+#pragma makedep unix
+
+#pragma makedep unix
+
+#include "win32u_private.h"
+#include "ntgdi_private.h"
+#include "ntuser_private.h"
+
+WINE_DEFAULT_DEBUG_CHANNEL(wineweb);
+
+/* --- the wineweb_drv C ABI v1 (resolved at the final-module link) --------- */
+
+extern int32_t wineweb_drv_create_window(int32_t x, int32_t y, uint32_t w, uint32_t h,
+                                         const uint8_t *title, size_t title_len,
+                                         uint64_t *out_hwnd);
+extern int32_t wineweb_drv_destroy_window(uint64_t hwnd);
+extern int32_t wineweb_drv_show_window(uint64_t hwnd, int32_t visible);
+extern int32_t wineweb_drv_set_text(uint64_t hwnd, const uint8_t *text, size_t text_len);
+extern int32_t wineweb_drv_surface_write(uint64_t hwnd, int32_t x, int32_t y, uint32_t w,
+                                         uint32_t h, const uint8_t *pixels);
+extern int32_t wineweb_drv_present(void);
+
+/* --- guest-hwnd -> drv-handle mapping ------------------------------------- */
+
+#define WWEB_MAX_WINDOWS 16
+static struct { HWND hwnd; uint64_t drv; } wweb_windows[WWEB_MAX_WINDOWS];
+
+static BOOL wweb_map(HWND hwnd, uint64_t *drv)
+{
+    unsigned i;
+    for (i = 0; i < WWEB_MAX_WINDOWS; i++)
+        if (wweb_windows[i].hwnd == hwnd) { *drv = wweb_windows[i].drv; return TRUE; }
+    return FALSE;
+}
+
+static BOOL wweb_add(HWND hwnd, uint64_t drv)
+{
+    unsigned i;
+    for (i = 0; i < WWEB_MAX_WINDOWS; i++)
+        if (!wweb_windows[i].hwnd) { wweb_windows[i].hwnd = hwnd; wweb_windows[i].drv = drv; return TRUE; }
+    return FALSE;
+}
+
+static void wweb_remove(HWND hwnd)
+{
+    unsigned i;
+    for (i = 0; i < WWEB_MAX_WINDOWS; i++)
+        if (wweb_windows[i].hwnd == hwnd) { wweb_windows[i].hwnd = 0; wweb_windows[i].drv = 0; }
+}
+
+/* --- the window surface ---------------------------------------------------- */
+
+struct wweb_surface
+{
+    struct window_surface header;
+    uint64_t drv;      /* the host half's handle */
+    uint32_t stride;   /* bytes per row of the DIB */
+};
+
+static void wweb_surface_set_clip( struct window_surface *surface, const RECT *rects, UINT count );
+static BOOL wweb_surface_flush( struct window_surface *surface, const RECT *rect,
+                                const RECT *dirty, const BITMAPINFO *color_info,
+                                const void *color_bits, BOOL shape_changed,
+                                const BITMAPINFO *shape_info, const void *shape_bits );
+static void wweb_surface_destroy( struct window_surface *surface );
+
+static struct window_surface_funcs wweb_surface_funcs = {
+    .size = sizeof(struct wweb_surface),
+    .set_clip = wweb_surface_set_clip,
+    .flush = wweb_surface_flush,
+    .destroy = wweb_surface_destroy,
+};
+
+static void wweb_surface_set_clip( struct window_surface *surface, const RECT *rects, UINT count )
+{
+    /* the compositor clips against the window rect itself; no host clip list */
+}
+
+static BOOL wweb_surface_flush( struct window_surface *surface, const RECT *rect,
+                                const RECT *dirty, const BITMAPINFO *color_info,
+                                const void *color_bits, BOOL shape_changed,
+                                const BITMAPINFO *shape_info, const void *shape_bits )
+{
+    struct wweb_surface *s = (struct wweb_surface *)surface;
+    UINT surface_w = surface->rect.right - surface->rect.left;
+    LONG x, y, x_end, y_end;
+    uint8_t *dst;
+    uint32_t len;
+
+    if (dirty->left < 0 || dirty->top < 0 || surface_w == 0) return FALSE;
+    x_end = min( dirty->right, surface->rect.right );
+    y_end = min( dirty->bottom, surface->rect.bottom );
+    if (x_end <= dirty->left || y_end <= dirty->top) return TRUE; /* nothing visible */
+    len = (uint32_t)(x_end - dirty->left) * 4;
+    if (!len || !(dst = malloc( len ))) return FALSE;
+
+    for (y = dirty->top; y < y_end; y++)
+    {
+        const uint8_t *src = (const uint8_t *)color_bits + (size_t)y * s->stride
+                             + (size_t)dirty->left * 4;
+        for (x = dirty->left; x < x_end; x++)
+        {
+            dst[(x - dirty->left) * 4 + 0] = src[(x - dirty->left) * 4 + 2]; /* R */
+            dst[(x - dirty->left) * 4 + 1] = src[(x - dirty->left) * 4 + 1]; /* G */
+            dst[(x - dirty->left) * 4 + 2] = src[(x - dirty->left) * 4 + 0]; /* B */
+            dst[(x - dirty->left) * 4 + 3] = 0xff;                           /* A */
+        }
+        wineweb_drv_surface_write( s->drv, dirty->left, y, x_end - dirty->left, 1, dst );
+    }
+    free( dst );
+    wineweb_drv_present();
+    return TRUE;
+}
+
+static void wweb_surface_destroy( struct window_surface *surface )
+{
+}
+
+static BOOL wweb_CreateWindowSurface( HWND hwnd, BOOL layered, const RECT *rect,
+                                      struct window_surface **surface )
+{
+    struct
+    {
+        BITMAPINFO info;
+        RGBQUAD colors[255];
+    } bmi;
+    struct window_surface *surf;
+    struct wweb_surface *ws;
+    uint64_t drv = 0;
+    UINT width = rect->right - rect->left, height = rect->bottom - rect->top;
+
+    if (!wweb_map( hwnd, &drv )) return FALSE; /* no drv window (not created) */
+    memset( &bmi, 0, sizeof(bmi) );
+    bmi.info.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+    bmi.info.bmiHeader.biWidth       = width;
+    bmi.info.bmiHeader.biHeight      = -(LONG)height; /* top-down */
+    bmi.info.bmiHeader.biPlanes      = 1;
+    bmi.info.bmiHeader.biBitCount    = 32;
+    bmi.info.bmiHeader.biCompression = BI_RGB;
+    bmi.info.bmiHeader.biSizeImage   = (DWORD)width * height * 4;
+
+    if (!(surf = window_surface_create( &wweb_surface_funcs, hwnd, rect, &bmi.info, 0 ))) return FALSE;
+    ws = (struct wweb_surface *)surf;
+    ws->drv = drv;
+    ws->stride = width * 4;
+    *surface = surf;
+    return TRUE;
+}
+
+/* --- the user_driver_funcs vtable ------------------------------------------ */
+
+static BOOL wweb_CreateWindow( HWND hwnd )
+{
+    struct window_rects rects;
+    RECT rect;
+    uint64_t drv = 0;
+    uint8_t title_utf8[128];
+    /* The guest title is UTF-16; the compositor's titles are bytes. Notepad's
+     * title is ASCII ("Notepad") — transcode the ASCII subset, loud-fail the
+     * rest (the spike doc names the gap; P4 widens it). */
+    WCHAR buf[128];
+    int i, len;
+
+    if (!get_window_rects( hwnd, COORDS_CLIENT, &rects, get_thread_dpi() )) return FALSE;
+    rect = rects.window;
+    len = NtUserInternalGetWindowText( hwnd, buf, 128 );
+    for (i = 0; i < len && i < 127; i++)
+        title_utf8[i] = (buf[i] < 0x80) ? (uint8_t)buf[i] : '?';
+    title_utf8[i] = 0;
+
+    if (wineweb_drv_create_window( rect.left, rect.top, rect.right - rect.left,
+                                   rect.bottom - rect.top, title_utf8, i, &drv ) != 0) return FALSE;
+    if (!wweb_add( hwnd, drv )) { wineweb_drv_destroy_window( drv ); return FALSE; }
+    return TRUE;
+}
+
+static void wweb_DestroyWindow( HWND hwnd )
+{
+    uint64_t drv;
+    if (wweb_map( hwnd, &drv )) { wineweb_drv_destroy_window( drv ); wweb_remove( hwnd ); }
+}
+
+static void wweb_SetWindowText( HWND hwnd, LPCWSTR text )
+{
+    uint64_t drv;
+    uint8_t title_utf8[128];
+    int i, len = min( lstrlenW( text ), 127 );
+    for (i = 0; i < len; i++)
+        title_utf8[i] = (text[i] < 0x80) ? (uint8_t)text[i] : '?';
+    title_utf8[i] = 0;
+    if (wweb_map( hwnd, &drv )) wineweb_drv_set_text( drv, title_utf8, i );
+}
+
+static UINT wweb_ShowWindow( HWND hwnd, INT cmd, RECT *rect, UINT swp )
+{
+    uint64_t drv;
+    BOOL visible = (cmd != SW_HIDE) && (NtUserGetWindowLongW( hwnd, GWL_STYLE ) & WS_VISIBLE);
+    if (wweb_map( hwnd, &drv )) wineweb_drv_show_window( drv, visible ? 1 : 0 );
+    return 0; /* no extra SetWindowPos flags; the walk continues client-side */
+}
+
+/* --- loud stubs ------------------------------------------------------------ */
+
+#define LOUD_STUB(ret, name, args, args_call, def) \
+    static ret nodrv_##name args \
+    { \
+        static int once; \
+        if (!once++) WARN( "wineweb.drv: %s reached (loud stub)\n", #name ); \
+        return def; \
+    }
+
+LOUD_STUB( BOOL,    ProcessEvents, (DWORD flags), (flags), FALSE )
+LOUD_STUB( LRESULT, WindowMessage, (HWND hwnd, UINT msg, WPARAM wp, LPARAM lp), (hwnd, msg, wp, lp), 0 )
+LOUD_STUB( void,    SetDesktopWindow, (HWND hwnd), (hwnd), )
+LOUD_STUB( void,    SetWindowStyle, (HWND hwnd, INT offset, STYLESTRUCT *style), (hwnd, offset, style), )
+LOUD_STUB( BOOL,    SystemParametersInfo, (UINT action, UINT param, void *data, UINT flags), (action, param, data, flags), FALSE )
+LOUD_STUB( BOOL,    GetCursorPos, (POINT *pt), (pt), FALSE )
+LOUD_STUB( BOOL,    SetCursorPos, (INT x, INT y), (x, y), FALSE )
+LOUD_STUB( void,    SetCursor, (HWND hwnd, HCURSOR handle), (hwnd, handle), )
+LOUD_STUB( void,    Beep, (void), (), )
+LOUD_STUB( void,    ThreadDetach, (void), (), )
+LOUD_STUB( BOOL,    CreateDesktop, (const WCHAR *name, UINT w, UINT h), (name, w, h), FALSE )
+LOUD_STUB( BOOL,    GetWindowStyleMasks, (HWND hwnd, UINT style, UINT ex_style, UINT *style_mask, UINT *ex_style_mask), (hwnd, style, ex_style, style_mask, ex_style_mask), FALSE )
+LOUD_STUB( void,    WindowPosChanged, (HWND hwnd, HWND insert_after, HWND owner, UINT swp_flags, const struct window_rects *rects, struct window_surface *surface), (hwnd, insert_after, owner, swp_flags, rects, surface), )
+LOUD_STUB( BOOL,    WindowPosChanging, (HWND hwnd, UINT swp_flags, BOOL shaped, const struct window_rects *rects), (hwnd, swp_flags, shaped, rects), FALSE )
+
+static const struct user_driver_funcs wineweb_user_driver =
+{
+    .pCreateWindow = wweb_CreateWindow,
+    .pDestroyWindow = wweb_DestroyWindow,
+    .pCreateWindowSurface = wweb_CreateWindowSurface,
+    .pSetWindowText = wweb_SetWindowText,
+    .pShowWindow = wweb_ShowWindow,
+    .pProcessEvents = nodrv_ProcessEvents,
+    .pWindowMessage = nodrv_WindowMessage,
+    .pSetDesktopWindow = nodrv_SetDesktopWindow,
+    .pSetWindowStyle = nodrv_SetWindowStyle,
+    .pSystemParametersInfo = nodrv_SystemParametersInfo,
+    .pGetCursorPos = nodrv_GetCursorPos,
+    .pSetCursorPos = nodrv_SetCursorPos,
+    .pSetCursor = nodrv_SetCursor,
+    .pBeep = nodrv_Beep,
+    .pThreadDetach = nodrv_ThreadDetach,
+    .pCreateDesktop = nodrv_CreateDesktop,
+    .pGetWindowStyleMasks = nodrv_GetWindowStyleMasks,
+    .pWindowPosChanged = nodrv_WindowPosChanged,
+    .pWindowPosChanging = nodrv_WindowPosChanging,
+};
+
+const struct user_driver_funcs *wineweb_user_driver_funcs(void)
+{
+    return &wineweb_user_driver;
+}

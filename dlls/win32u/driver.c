@@ -1033,8 +1033,18 @@ static BOOL load_desktop_driver( HWND hwnd )
  * Each entry point simply loads the real driver and chains to it.
  */
 
+#ifdef __wasm__ /* wineweb: the adapter (dlls/win32u/wineweb_driver.c, patch 0023) */
+extern const struct user_driver_funcs *wineweb_user_driver_funcs(void);
+#endif
+
 static void load_display_driver(void)
 {
+#ifdef __wasm__ /* wineweb: the desktop-driver registry dance is P2.4/P6
+                 * territory — the wasm adapter installs directly (the P3.7
+                 * §2.5 shortcut, landed by patch 0023). */
+    __wine_set_user_driver( wineweb_user_driver_funcs(), WINE_GDI_DRIVER_VERSION );
+    return;
+#endif
     USEROBJECTFLAGS flags;
     HWINSTA winstation;
 

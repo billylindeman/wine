@@ -279,6 +279,10 @@ static inline unsigned int wait_reply( int reply_fd, struct __server_request_inf
 }
 
 
+#ifdef __wasm__ /* wineweb: the sync miniserver (patch 0023) */
+extern unsigned int wineweb_server_call( void *req_ptr );
+#endif
+
 /***********************************************************************
  *           server_call_unlocked
  */
@@ -288,13 +292,11 @@ unsigned int server_call_unlocked( void *req_ptr )
     struct __server_request_info * const req = req_ptr;
     unsigned int ret;
 
-#ifdef __wasm__ /* wineweb: there is no wineserver socket — every request
-                 * fails gracefully (the caller's error path) instead of
-                 * aborting the process, so the conformance exes record the
-                 * failure and keep going. The miniserver SAB transport
-                 * replaces this in P6 (docs/03 §4). */
-    (void)data; (void)req;
-    return STATUS_NOT_IMPLEMENTED;
+#ifdef __wasm__ /* wineweb: no wineserver socket — the sync miniserver
+                 * answers in-module (patch 0023; the P3.8 notepad capstone,
+                 * docs/spikes/p3-notepad-demo.md T2). */
+    (void)data;
+    return wineweb_server_call( req_ptr );
 #endif
     if ((ret = send_request( data->request_fd, req ))) return ret;
     return wait_reply( data->reply_fd, req );
