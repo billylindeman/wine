@@ -1604,6 +1604,79 @@ static WINE_MODREF *alloc_module( HMODULE hModule, const UNICODE_STRING *nt_name
 }
 
 
+#ifdef __wasm__ /* wineweb: the wasm builtin flavor has no PE images to map —
+                 * the loader module table is populated from the boot instead
+                 * (P2.10). Everything here is Wine's own structures: get_modref,
+                 * find_basename_module and the PEB Ldr lists all consult them. */
+/******************************************************************
+ *		wineweb_ldr_register_module (wineweb boot seam)
+ *
+ * Register one module whose backing is a wasm builtin. `base` is the
+ * guest-visible base — for builtins that is their thunk page, whose page
+ * index is the builtin registry's dll index (docs/spikes/p2-kernel32.md §3),
+ * so the base doubles as the export registry reference. `path` is the honest
+ * guest path (e.g. C:\windows\system32\kernel32.dll). Must run after the
+ * process heap exists (the PEB.ProcessHeap the boot wrote) and after the
+ * wasm TEB is set. Not exported through any .spec: callers are the boot.
+ */
+NTSTATUS wineweb_ldr_register_module( const WCHAR *path, void *base, SIZE_T size )
+{
+    static BOOL tables_init;
+    WINE_MODREF *wm;
+    WCHAR *buffer;
+    SIZE_T len = wcslen( path );
+    const WCHAR *name;
+
+    RtlEnterCriticalSection( &loader_section );
+    if (!tables_init)
+    {
+        unsigned int i;
+        for (i = 0; i < HASH_MAP_SIZE; i++) InitializeListHead( &hash_table[i] );
+        NtCurrentTeb()->Peb->LdrData = &ldr;
+        tables_init = TRUE;
+    }
+    if (!(wm = RtlAllocateHeap( GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*wm) )))
+    {
+        RtlLeaveCriticalSection( &loader_section );
+        return STATUS_NO_MEMORY;
+    }
+    if (!(wm->ldr.DdagNode = RtlAllocateHeap( GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*wm->ldr.DdagNode) )))
+    {
+        RtlFreeHeap( GetProcessHeap(), 0, wm );
+        RtlLeaveCriticalSection( &loader_section );
+        return STATUS_NO_MEMORY;
+    }
+    if (!(buffer = RtlAllocateHeap( GetProcessHeap(), 0, (len + 1) * sizeof(WCHAR) )))
+    {
+        RtlFreeHeap( GetProcessHeap(), 0, wm->ldr.DdagNode );
+        RtlFreeHeap( GetProcessHeap(), 0, wm );
+        RtlLeaveCriticalSection( &loader_section );
+        return STATUS_NO_MEMORY;
+    }
+    memcpy( buffer, path, (len + 1) * sizeof(WCHAR) );
+    wm->ldr.DllBase       = base;
+    wm->ldr.SizeOfImage   = size;
+    wm->ldr.Flags         = LDR_WINE_INTERNAL;
+    wm->ldr.LoadCount     = 1;
+    InitializeListHead( &wm->ldr.DdagNode->Modules );
+    InsertTailList( &wm->ldr.DdagNode->Modules, &wm->ldr.NodeModuleLink );
+    RtlInitUnicodeString( &wm->ldr.FullDllName, buffer );
+    name = wcsrchr( buffer, '\\' );
+    if (!name) name = buffer;
+    else name++;
+    RtlInitUnicodeString( &wm->ldr.BaseDllName, name );
+
+    InsertTailList( &NtCurrentTeb()->Peb->LdrData->InLoadOrderModuleList, &wm->ldr.InLoadOrderLinks );
+    InsertTailList( &NtCurrentTeb()->Peb->LdrData->InMemoryOrderModuleList, &wm->ldr.InMemoryOrderLinks );
+    InsertTailList( &hash_table[hash_basename( &wm->ldr.BaseDllName )], &wm->ldr.HashLinks );
+    if (rtl_rb_tree_put( &base_address_index_tree, wm->ldr.DllBase, &wm->ldr.BaseAddressIndexNode, base_address_compare ))
+        ERR( "wineweb_ldr_register_module: rtl_rb_tree_put failed.\n" );
+    /* wait until init is called for inserting into InInitializationOrderModuleList */
+    RtlLeaveCriticalSection( &loader_section );
+    return STATUS_SUCCESS;
+}
+#endif
+
 /*************************************************************************
  *              alloc_thread_tls
  *
