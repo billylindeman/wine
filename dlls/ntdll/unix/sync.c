@@ -3417,6 +3417,25 @@ union tid_alert_entry
 #define TID_ALERT_BLOCK_SIZE (65536 / sizeof(union tid_alert_entry))
 static union tid_alert_entry *tid_alert_blocks[4096];
 
+#ifdef __wasm__ /* wineweb: the tid-alert registry is keyed by the guest
+                 * thread's server tid; the wasm boot has no unix thread_data
+                 * (pthread_getspecific returns NULL and its tid field reads
+                 * from the null page as 0 — the P3.0 "tid 0 is too high"
+                 * evidence). The win32-faithful identity is the TEB's
+                 * ClientId.UniqueThread, which the boot sets to the fixed
+                 * host-backed main-thread id (win32 tids are multiples of 4;
+                 * the sched group's thread_spawn assigns the rest, P3). */
+static inline DWORD wineweb_current_tid(void)
+{
+    return (DWORD)(ULONG_PTR)NtCurrentTeb()->ClientId.UniqueThread;
+}
+#else
+static inline DWORD wineweb_current_tid(void)
+{
+    return get_thread_data()->tid;
+}
+#endif
+
 static unsigned int handle_to_index( HANDLE handle, unsigned int *block_idx )
 {
     unsigned int idx = (wine_server_obj_handle(handle) >> 2) - 1;
@@ -3588,7 +3607,7 @@ static LONGLONG update_timeout( ULONGLONG end )
  */
 NTSTATUS WINAPI NtWaitForAlertByThreadId( const void *address, const LARGE_INTEGER *timeout )
 {
-    union tid_alert_entry *entry = get_tid_alert_entry( ULongToHandle(get_thread_data()->tid) );
+    union tid_alert_entry *entry = get_tid_alert_entry( ULongToHandle(wineweb_current_tid()) );
 
     TRACE( "%p %s\n", address, debugstr_timeout( timeout ) );
 
