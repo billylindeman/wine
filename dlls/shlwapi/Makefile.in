@@ -1,5 +1,6 @@
 EXTRADEFS = -D_SHLWAPI_
 MODULE    = shlwapi.dll
+STATICLIB = libshlwapi.a
 IMPORTLIB = shlwapi
 IMPORTS   = uuid shcore user32 gdi32 advapi32 kernelbase
 DELAYIMPORTS = userenv oleaut32 ole32 comctl32 comdlg32 mpr mlang urlmon shell32 winmm
