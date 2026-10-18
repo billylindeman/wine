@@ -1262,7 +1262,10 @@ typedef struct _I386_CONTEXT
 #define CONTEXT_I386_FULL (CONTEXT_I386_CONTROL | CONTEXT_I386_INTEGER | CONTEXT_I386_SEGMENTS)
 #define CONTEXT_I386_ALL (CONTEXT_I386_FULL | CONTEXT_I386_FLOATING_POINT | CONTEXT_I386_DEBUG_REGISTERS | CONTEXT_I386_EXTENDED_REGISTERS)
 
-#ifdef __i386__
+#if defined(__i386__) || defined(__WINE_GUEST_I386__)
+/* __WINE_GUEST_I386__: wasm-builtin compiles target the *guest* CPU (core32 =
+ * i386, ADR-0003/doc 04 §2), not the wasm "compiler CPU"; the i386 CONTEXT is
+ * pointer-free so it embeds identically. */
 
 #define CONTEXT_CONTROL CONTEXT_I386_CONTROL
 #define CONTEXT_INTEGER CONTEXT_I386_INTEGER
@@ -2617,7 +2620,8 @@ NTSYSAPI void   WINAPI RtlUnwind(void*,void*,EXCEPTION_RECORD*,void*);
 NTSYSAPI void*  WINAPI RtlPcToFileHeader(void*,void**);
 NTSYSAPI ULONG  WINAPI RtlWalkFrameChain(void**,ULONG,ULONG);
 
-#ifndef __i386__
+#if !defined(__i386__) && !defined(__WINE_GUEST_I386__)
+/* (guest-i386 wasm compiles have no table-based unwind either) */
 
 #define UNWIND_HISTORY_TABLE_SIZE 12
 
@@ -2658,7 +2662,7 @@ NTSYSAPI LONG               WINAPI RtlVirtualUnwind2(ULONG,ULONG_PTR,ULONG_PTR,R
 NTSYSAPI BOOLEAN            WINAPI RtlIsEcCode(ULONG_PTR);
 #endif
 
-#endif  /* __i386__ */
+#endif  /* !__i386__ && !__WINE_GUEST_I386__ */
 #endif  /* _APISETRTLSUPPORT_ */
 
 typedef struct _NT_TIB
@@ -2705,6 +2709,19 @@ NTSYSAPI struct _TEB * WINAPI NtCurrentTeb(void) __attribute__((pure));
 # else
 NTSYSAPI struct _TEB * WINAPI NtCurrentTeb(void);
 # endif
+#elif defined(__WINE_GUEST_I386__) && defined(__GNUC__)
+/* wasm-builtin side: the TEB is a thread-local (wasm TLS) set up by the
+ * thread bootstrap; no segment registers to lean on */
+/* wasm: the TEB pointer is a plain global for now — the guest is
+ * effectively single-threaded until the sched seam (P2.4), and the
+ * cross-object TLS models disagreed (P2.9: a _Thread_local definition
+ * compiled in one flag set was not the variable another set referenced).
+ * TODO(P2.4): back to TLS when the thread bootstrap owns spawn. */
+extern struct _TEB *__wine_current_teb;
+static FORCEINLINE struct _TEB * WINAPI NtCurrentTeb(void)
+{
+    return __wine_current_teb;
+}
 #elif defined(__i386__) && defined(__GNUC__)
 static FORCEINLINE struct _TEB * WINAPI NtCurrentTeb(void)
 {
