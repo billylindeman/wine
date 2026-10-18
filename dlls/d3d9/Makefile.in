@@ -1,4 +1,5 @@
 MODULE    = d3d9.dll
+STATICLIB = libd3d9.a
 IMPORTLIB = d3d9
 IMPORTS   = dxguid uuid wined3d
 

@@ -1,4 +1,5 @@
 MODULE    = dxgi.dll
+STATICLIB = libdxgi.a
 IMPORTLIB = dxgi
 IMPORTS   = gdi32 dxguid uuid wined3d user32 win32u
 EXTRAINCL = $(VKD3D_PE_CFLAGS)
