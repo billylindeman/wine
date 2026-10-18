@@ -20,6 +20,12 @@
 #ifndef __WINE_SETJMP_H
 #define __WINE_SETJMP_H
 
+#ifdef __wasm__
+/* wasm: the wasi SjLj setjmp is the only backing (there is no _setjmpex
+ * intrinsic); the msvcrt shapes below would shadow and conflict with it. */
+#include_next <setjmp.h>
+#else
+
 #include <corecrt.h>
 
 #pragma pack(push,8)
@@ -181,5 +187,7 @@ _ACRTIMP int __cdecl __attribute__((__nothrow__,__returns_twice__)) _setjmpex(jm
 #endif
 
 #pragma pack(pop)
+
+#endif /* __wasm__ */
 
 #endif /* __WINE_SETJMP_H */

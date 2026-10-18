@@ -363,13 +363,21 @@ void WINAPI DECLSPEC_HOTPATCH RaiseFailFastException( EXCEPTION_RECORD *record, 
         rec.ExceptionCode    = STATUS_FAIL_FAST_EXCEPTION;
         rec.ExceptionFlags   = EXCEPTION_NONCONTINUABLE;
         rec.ExceptionRecord  = NULL;
+#ifdef __wasm__
+        rec.ExceptionAddress = NULL; /* __builtin_return_address is unimplemented on wasm; the record never continues */
+#else
         rec.ExceptionAddress = __builtin_return_address(0);
+#endif
         rec.NumberParameters = 0;
         record = &rec;
     }
     else if (flags & FAIL_FAST_GENERATE_EXCEPTION_ADDRESS)
     {
+#ifdef __wasm__
+        record->ExceptionAddress = NULL; /* same wasm limitation */
+#else
         record->ExceptionAddress = __builtin_return_address(0);
+#endif
     }
 
     for (;;) NtRaiseException( record, context, FALSE );

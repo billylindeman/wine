@@ -1,5 +1,6 @@
 EXTRADEFS = -DWINBASEAPI= -DWINADVAPI= -DWINUSERAPI= -DWINSHLWAPI=
 MODULE    = kernelbase.dll
+STATICLIB = libkernelbase.a
 IMPORTLIB = kernelbase
 IMPORTS   = uuid ntdll
 

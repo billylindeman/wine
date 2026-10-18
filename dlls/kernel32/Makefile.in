@@ -1,5 +1,6 @@
 EXTRADEFS = -D_KERNEL32_ -D_NORMALIZE_
 MODULE    = kernel32.dll
+STATICLIB = libkernel32.a
 IMPORTLIB = kernel32
 IMPORTS   = kernelbase ntdll
 

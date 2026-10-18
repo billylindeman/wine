@@ -34,7 +34,14 @@ struct pseudo_console
 extern WCHAR *file_name_AtoW( LPCSTR name, BOOL alloc );
 extern DWORD file_name_WtoA( LPCWSTR src, INT srclen, LPSTR dest, INT destlen );
 extern void init_global_data(void);
+#ifdef __wasm__
+/* the ntdll unix side has a same-named init_startup_info(void) — the unified
+ * builtin archive links both, so ours carries a distinct symbol name */
+extern void init_startup_info_params( RTL_USER_PROCESS_PARAMETERS *params );
+#define init_startup_info( params ) init_startup_info_params( params )
+#else
 extern void init_startup_info( RTL_USER_PROCESS_PARAMETERS *params );
+#endif
 extern void init_locale( HMODULE module );
 extern void init_console(void);
 extern BOOL is_console_handle( HANDLE );
