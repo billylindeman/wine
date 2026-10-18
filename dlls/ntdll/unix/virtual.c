@@ -4147,6 +4147,20 @@ void virtual_map_user_shared_data(void)
  */
 void virtual_init_user_shared_data(void)
 {
+#ifdef __wasm__
+    /* wasm builtin: there is no server-backed section to remap — commit the
+     * USD page at its fixed guest address through the VM manager (the shim's
+     * mmap, docs/03 §6) and fill it inline with the shared code below. */
+    KUSER_SHARED_DATA *data = user_shared_data;
+    SYSTEM_BASIC_INFORMATION info;
+
+    if (mmap( data, sizeof(*data), PROT_READ | PROT_WRITE, MAP_FIXED | MAP_PRIVATE | MAP_ANON, -1, 0 ) == MAP_FAILED)
+    {
+        ERR( "failed to commit the process USD\n" );
+        exit(1);
+    }
+    virtual_get_system_info( &info, FALSE );
+#else
     UNICODE_STRING name_str = RTL_CONSTANT_STRING( shared_data_nameW );
     OBJECT_ATTRIBUTES attr = { sizeof(attr), 0, &name_str };
     SYSTEM_BASIC_INFORMATION info;
@@ -4170,6 +4184,7 @@ void virtual_init_user_shared_data(void)
     NtClose( section );
 
     virtual_get_system_info( &info, FALSE );
+#endif
 
     data->TickCountMultiplier   = 1 << 24;
     data->LargePageMinimum      = 2 * 1024 * 1024;

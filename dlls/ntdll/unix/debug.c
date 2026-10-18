@@ -219,6 +219,8 @@ static void init_options(void)
     parse_options( wine_debug, app_name );
 }
 
+#ifndef __wasm__ /* the DLL side defines these; keeping both would duplicate
+                  * symbols in the unified builtin archive */
 /***********************************************************************
  *		__wine_dbg_get_channel_flags  (NTDLL.@)
  *
@@ -252,10 +254,12 @@ unsigned char __cdecl __wine_dbg_get_channel_flags( struct __wine_debug_channel 
     if (!(flags & (1 << __WINE_DBCL_INIT))) channel->flags = flags; /* not dynamically changeable */
     return flags;
 }
+#endif /* __wasm__ */
 
 /***********************************************************************
  *		__wine_dbg_strdup  (NTDLL.@)
  */
+#ifndef __wasm__ /* unified-archive dedup */
 const char * __cdecl __wine_dbg_strdup( const char *str )
 {
     struct debug_info *info = get_info( get_thread_data() );
@@ -267,6 +271,7 @@ const char * __cdecl __wine_dbg_strdup( const char *str )
     info->str_pos = pos + n;
     return memcpy( info->strings + pos, str, n );
 }
+#endif /* __wasm__ */
 
 /***********************************************************************
  *		unixcall_wine_dbg_write
@@ -297,6 +302,7 @@ NTSTATUS wow64_wine_dbg_write( void *args )
 /***********************************************************************
  *		__wine_dbg_output  (NTDLL.@)
  */
+#ifndef __wasm__ /* unified-archive dedup */
 int __cdecl __wine_dbg_output( const char *str )
 {
     struct debug_info *info = get_info( get_thread_data() );
@@ -313,10 +319,12 @@ int __cdecl __wine_dbg_output( const char *str )
     if (*str) ret += append_output( info, str, strlen( str ));
     return ret;
 }
+#endif /* __wasm__ */
 
 /***********************************************************************
  *		__wine_dbg_header  (NTDLL.@)
  */
+#ifndef __wasm__ /* unified-archive dedup */
 int __cdecl __wine_dbg_header( enum __wine_debug_class cls, struct __wine_debug_channel *channel,
                                const char *function )
 {
@@ -350,6 +358,7 @@ int __cdecl __wine_dbg_header( enum __wine_debug_class cls, struct __wine_debug_
     info->out_pos = pos - info->output;
     return info->out_pos;
 }
+#endif /* __wasm__ */
 
 /***********************************************************************
  *		dbg_init

@@ -1548,6 +1548,28 @@ static const void *get_module_data_dir( HMODULE module, ULONG dir, ULONG *size )
 /***********************************************************************
  *           load_ntdll_functions
  */
+#ifdef __wasm__ /* unified builtin: no ntdll.so and no PE export directory to
+                 * resolve from — the dispatchers are wired directly (docs/02 §7):
+                 * syscalls belong to the driver, unix-calls to the in-module
+                 * table. TODO(P2.10): the full boot path. */
+extern NTSTATUS (WINAPI *__wine_unix_call_dispatcher)( unixlib_handle_t, unsigned int, void * );
+extern unixlib_handle_t __wine_unixlib_handle;
+
+static NTSTATUS wasm_unix_call_dispatcher( unixlib_handle_t handle, unsigned int code, void *args )
+{
+    const unixlib_entry_t *funcs = (const unixlib_entry_t *)(UINT_PTR)handle;
+
+    return funcs[code]( args );
+}
+
+static void load_ntdll_functions( HMODULE module )
+{
+    __wine_unix_call_dispatcher = wasm_unix_call_dispatcher;
+    __wine_unixlib_handle = (UINT_PTR)unix_call_funcs;
+}
+
+#else
+
 static void load_ntdll_functions( HMODULE module )
 {
     void **p__wine_syscall_dispatcher;
@@ -1591,6 +1613,8 @@ static void load_ntdll_functions( HMODULE module )
     else *p__wine_unix_call_dispatcher = __wine_unix_call_dispatcher;
 #undef GET_FUNC
 }
+
+#endif /* __wasm__ */
 
 
 /***********************************************************************

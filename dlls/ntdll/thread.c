@@ -35,7 +35,10 @@ WINE_DECLARE_DEBUG_CHANNEL(relay);
 WINE_DECLARE_DEBUG_CHANNEL(pid);
 WINE_DECLARE_DEBUG_CHANNEL(timestamp);
 
+#ifndef __wasm__ /* unified-archive dedup: the unix virtual.c definition is
+                  * canonical on wasm (virtual_init may repoint it) */
 struct _KUSER_SHARED_DATA *user_shared_data = (void *)0x7ffe0000;
+#endif
 
 struct debug_info
 {

@@ -2309,6 +2309,8 @@ NTSTATUS WINAPI NtQueryInstallUILanguage( LANGID *lang )
     return STATUS_SUCCESS;
 }
 
+#ifndef __wasm__ /* the DLL side defines these; keeping both would duplicate
+                  * symbols in the unified builtin archive */
 /**********************************************************************
  *      RtlUpcaseUnicodeChar  (ntdll.so)
  */
@@ -2461,6 +2463,7 @@ PEB * WINAPI RtlGetCurrentPeb(void)
 {
     return peb;
 }
+#endif /* __wasm__ */
 
 /**********************************************************************
  *      PsGetCurrentProcessId  (ntdll.so)

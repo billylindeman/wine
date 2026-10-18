@@ -2584,6 +2584,7 @@ NTSTATUS WINAPI NtSetIntervalProfile( ULONG interval, KPROFILE_SOURCE source )
 }
 
 
+#ifndef __wasm__ /* unified-archive dedup: the DLL side's time.c defines this */
 /******************************************************************************
  *              NtGetTickCount (NTDLL.@)
  */
@@ -2592,6 +2593,7 @@ ULONG WINAPI NtGetTickCount(void)
     /* note: we ignore TickCountMultiplier */
     return user_shared_data->TickCount.LowPart;
 }
+#endif
 
 
 /******************************************************************************

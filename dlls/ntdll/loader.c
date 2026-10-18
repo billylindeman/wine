@@ -3422,26 +3422,33 @@ NTSTATUS WINAPI __wine_ctrl_routine( void *arg )
 /***********************************************************************
  *           __wine_unix_spawnvp
  */
+#ifndef __wasm__ /* unified-archive dedup: the unix side's direct impl is
+                  * canonical on wasm; this forwarder would need the boot seam */
 NTSTATUS WINAPI __wine_unix_spawnvp( char * const argv[], int wait )
 {
     struct wine_spawnvp_params params = { (char **)argv, wait };
 
     return WINE_UNIX_CALL( unix_wine_spawnvp, &params );
 }
-
+#endif
 
 /***********************************************************************
  *           wine_server_call
  */
+#ifndef __wasm__ /* unified-archive dedup (and the unix impl avoids the
+                  * dispatcher indirection entirely) */
 unsigned int CDECL wine_server_call( void *req_ptr )
 {
     return WINE_UNIX_CALL( unix_wine_server_call, req_ptr );
 }
+#endif
 
 
 /***********************************************************************
  *           wine_server_fd_to_handle
  */
+#ifndef __wasm__ /* unified-archive dedup: the unix side's direct impl is
+                  * canonical on wasm; this forwarder would need the boot seam */
 NTSTATUS CDECL wine_server_fd_to_handle( int fd, unsigned int access, unsigned int attributes,
                                          HANDLE *handle )
 {
@@ -3449,11 +3456,9 @@ NTSTATUS CDECL wine_server_fd_to_handle( int fd, unsigned int access, unsigned i
 
     return WINE_UNIX_CALL( unix_wine_server_fd_to_handle, &params );
 }
+#endif
 
-
-/***********************************************************************
- *           wine_server_handle_to_fd (NTDLL.@)
- */
+#ifndef __wasm__ /* unified-archive dedup (see wine_server_call) */
 NTSTATUS CDECL wine_server_handle_to_fd( HANDLE handle, unsigned int access, int *unix_fd,
                                          unsigned int *options )
 {
@@ -3461,6 +3466,7 @@ NTSTATUS CDECL wine_server_handle_to_fd( HANDLE handle, unsigned int access, int
 
     return WINE_UNIX_CALL( unix_wine_server_handle_to_fd, &params );
 }
+#endif
 
 /******************************************************************
  *		LdrLoadDll (NTDLL.@)
