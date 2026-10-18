@@ -288,6 +288,14 @@ unsigned int server_call_unlocked( void *req_ptr )
     struct __server_request_info * const req = req_ptr;
     unsigned int ret;
 
+#ifdef __wasm__ /* wineweb: there is no wineserver socket — every request
+                 * fails gracefully (the caller's error path) instead of
+                 * aborting the process, so the conformance exes record the
+                 * failure and keep going. The miniserver SAB transport
+                 * replaces this in P6 (docs/03 §4). */
+    (void)data; (void)req;
+    return STATUS_NOT_IMPLEMENTED;
+#endif
     if ((ret = send_request( data->request_fd, req ))) return ret;
     return wait_reply( data->reply_fd, req );
 }
