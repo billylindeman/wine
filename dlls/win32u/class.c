@@ -465,7 +465,11 @@ static NTSTATUS get_shared_class( CLASS *class, struct object_lock *lock, const 
 
     TRACE( "class %p, lock %p, class_shm %p\n", class, lock, class_shm );
 
-    if (!(object = class->shared)) return STATUS_INVALID_HANDLE;
+    if (!(object = class->shared))
+    {
+        ERR( "W6: get_shared_class NULL shared for class %p\n", (void *)class );
+        return STATUS_INVALID_HANDLE;
+    }
 
     if (!lock->id || !shared_object_release_seqlock( object, lock->seq ))
     {
@@ -742,10 +746,16 @@ ATOM WINAPI NtUserGetClassInfoEx( HINSTANCE instance, UNICODE_STRING *name, WNDC
     CLASS *class;
     ATOM atom = 0;
 
+    ERR( "W6: NtUserGetClassInfoEx %s instance %p\n", debugstr_us(name), instance );
     /* create the desktop window to trigger builtin class registration */
     if (!is_desktop_class( name ) && !is_message_class( name )) get_desktop_window();
 
-    if (!(class = find_class( instance, name ))) return 0;
+    if (!(class = find_class( instance, name )))
+    {
+        ERR( "W6: find_class FAILED for %s\n", debugstr_us(name) );
+        return 0;
+    }
+    ERR( "W6: find_class ok\n" );
 
     while ((status = get_shared_class( class, &lock, &class_shm )) == STATUS_PENDING)
     {

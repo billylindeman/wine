@@ -480,8 +480,14 @@ static LRESULT dispatch_win_proc_params( struct win_proc_params *params, size_t 
     if (params->ansi_dst)
         WARN( "wineweb: ansi WndProc dispatch reached (loud)\n" );
     else
+    {
+        ERR( "W6: guest dispatch proc %#x hwnd %p msg %u wp %#x lp %#x\n",
+             (unsigned)(UINT_PTR)params->procW, params->hwnd, params->msg,
+             (unsigned)params->wparam, (unsigned)params->lparam );
         result = wineweb_guest_call( (UINT_PTR)params->procW, (UINT_PTR)params->hwnd,
                                      params->msg, params->wparam, params->lparam );
+        ERR( "W6: guest dispatch result %#x\n", (unsigned)result );
+    }
     thread_info->msg_call_depth--;
     return result;
 #endif

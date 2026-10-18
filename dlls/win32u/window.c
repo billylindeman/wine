@@ -5726,6 +5726,8 @@ static WND *create_window_handle( HWND parent, HWND owner, UNICODE_STRING *name,
     struct tagCLASS *class = NULL;
     WND *win;
 
+    ERR( "W6: create_window_handle parent %p name %s\n", parent, debugstr_us(name) );
+
     if (NTUSER_DPI_CONTEXT_IS_MONITOR_AWARE( dpi_context ) && dpi_context != NTUSER_DPI_PER_MONITOR_AWARE)
     {
         FIXME( "DPI context %#x not implemented\n", dpi_context );
@@ -5909,6 +5911,9 @@ HWND WINAPI NtUserCreateWindowEx( DWORD ex_style, UNICODE_STRING *class_name,
     UINT context;
     WND *win;
 
+    ERR( "W6: NtUserCreateWindowEx enter class %s style %#x parent %p\n",
+         debugstr_us(class_name), style, parent );
+
     TRACE( "ex_style %#x, class_name %s, version %s, window_name %s, style %#x, x %u, y %u, cx %u, cy %u, "
            "parent %p, menu %p, class_instance %p, params %p, flags %#x, instance %p, class %s, ansi %u\n",
            ex_style, debugstr_us(class_name), debugstr_us(version), debugstr_us(window_name), style, x, y, cx, cy,
@@ -6013,10 +6018,15 @@ HWND WINAPI NtUserCreateWindowEx( DWORD ex_style, UNICODE_STRING *class_name,
     cbtc.lpcs = &cs;
     if (call_hooks( WH_CBT, HCBT_CREATEWND, (WPARAM)hwnd, (LPARAM)&cbtc, sizeof(cbtc) ))
     {
+        ERR( "W6: CBT hook aborted the window\n" );
         free_window_handle( hwnd );
         return 0;
     }
-    if (!(win = get_win_ptr( hwnd ))) return 0;
+    if (!(win = get_win_ptr( hwnd )))
+    {
+        ERR( "W6: get_win_ptr failed after the CBT hook\n" );
+        return 0;
+    }
 
     /*
      * Correct the window styles.
@@ -6090,6 +6100,7 @@ HWND WINAPI NtUserCreateWindowEx( DWORD ex_style, UNICODE_STRING *class_name,
     if (!apply_window_pos( hwnd, 0, SWP_NOZORDER | SWP_NOACTIVATE, surface, &new_rects, NULL ))
     {
         if (surface) window_surface_release( surface );
+        ERR( "W6: goto failed via apply_window_pos\n" );
         goto failed;
     }
     if (surface) window_surface_release( surface );
@@ -6100,6 +6111,7 @@ HWND WINAPI NtUserCreateWindowEx( DWORD ex_style, UNICODE_STRING *class_name,
     if (!send_message_timeout( hwnd, WM_NCCREATE, 0, (LPARAM)&cs, SMTO_NORMAL, 0, ansi ))
     {
         WARN( "%p: aborted by WM_NCCREATE\n", hwnd );
+        ERR( "W6: goto failed via WM_NCCREATE abort\n" );
         goto failed;
     }
 
@@ -6129,15 +6141,22 @@ HWND WINAPI NtUserCreateWindowEx( DWORD ex_style, UNICODE_STRING *class_name,
         apply_window_pos( hwnd, insert_after, SWP_NOACTIVATE, surface, &new_rects, NULL );
         if (surface) window_surface_release( surface );
     }
-    else goto failed;
+    else { ERR( "W6: goto failed via get_window_rect_rel\n" ); goto failed; }
 
     /* send WM_CREATE */
     if (send_message_timeout( hwnd, WM_CREATE, 0, (LPARAM)&cs, SMTO_NORMAL, 0, ansi ) == -1)
+    {
+        ERR( "W6: goto failed via WM_CREATE == -1\n" );
         goto failed;
+    }
 
     /* call the driver */
 
-    if (!user_driver->pCreateWindow( hwnd )) goto failed;
+    if (!user_driver->pCreateWindow( hwnd ))
+    {
+        ERR( "W6: user_driver pCreateWindow failed\n" );
+        goto failed;
+    }
 
     NtUserNotifyWinEvent( EVENT_OBJECT_CREATE, hwnd, OBJID_WINDOW, 0 );
 
@@ -6209,6 +6228,7 @@ HWND WINAPI NtUserCreateWindowEx( DWORD ex_style, UNICODE_STRING *class_name,
     return hwnd;
 
 failed:
+    ERR( "W6: NtUserCreateWindowEx failed label\n" );
     destroy_window( hwnd );
     set_thread_dpi_awareness_context( context );
     return 0;

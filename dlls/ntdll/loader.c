@@ -36,6 +36,9 @@
 #include "ntdll_misc.h"
 #include "ddk/ntddk.h"
 #include "ddk/wdm.h"
+#ifdef __wasm__ /* wineweb (patch 0026 W6): unix_private.h's boot-pid global */
+extern DWORD pid;
+#endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(module);
 WINE_DECLARE_DEBUG_CHANNEL(relay);
@@ -1657,6 +1660,11 @@ NTSTATUS wineweb_ldr_init_process_defaults( PEB *peb, const WCHAR *cmdline, cons
     RtlInitializeBitMap( &tls_bitmap, peb->TlsBitmapBits, sizeof(peb->TlsBitmapBits) * 8 );
     RtlInitializeBitMap( &tls_expansion_bitmap, peb->TlsExpansionBitmapBits,
                          sizeof(peb->TlsExpansionBitmapBits) * 8 );
+#ifdef __wasm__ /* wineweb (patch 0026 W6): the boot has no server socket to
+                 * learn the pid from — the boot stamps the TEB ClientId from
+                 * the miniserver before calling this. */
+    pid = HandleToULong( NtCurrentTeb()->ClientId.UniqueProcess );
+#endif
     /* TLS index 0 is always reserved (LdrInitializeProcess's own contract). */
     RtlSetBits( peb->TlsBitmap, 0, 1 );
     RtlSetBits( peb->TlsBitmap, NTDLL_TLS_ERRNO, 1 );

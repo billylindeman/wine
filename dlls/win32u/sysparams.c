@@ -333,12 +333,20 @@ static struct ratio min_ratio( struct ratio x, struct ratio y )
 
 void user_lock(void)
 {
+#ifdef __wasm__ /* wineweb (patch 0026 W6): the single-threaded boot needs
+                 * no mutex, and the wasi-pthread unlock trapped OOB on the
+                 * create_window path — revisit with real threads (P6). */
+    return;
+#endif
     pthread_mutex_lock( &user_mutex );
     if (!user_lock_rec++) user_lock_thread = GetCurrentThreadId();
 }
 
 void user_unlock(void)
 {
+#ifdef __wasm__ /* wineweb (patch 0026 W6): see user_lock. */
+    return;
+#endif
     if (!--user_lock_rec) user_lock_thread = 0;
     pthread_mutex_unlock( &user_mutex );
 }

@@ -212,8 +212,12 @@ const shared_object_t *find_shared_session_object( object_id_t id, mem_size_t of
     {
         object = (const shared_object_t *)(block->data + offset - block->offset);
         if (id == shared_object_get_id( object )) return object;
-        WARN( "Session object id doesn't match expected id %s\n", wine_dbgstr_longlong(id) );
+        ERR( "W6: session object id mismatch expected %s got %s (offset %s)\n",
+             wine_dbgstr_longlong(id), wine_dbgstr_longlong( shared_object_get_id( object )),
+             wine_dbgstr_longlong(offset) );
     }
+    else ERR( "W6: session block lookup failed id %s offset %s status %#x\n",
+              wine_dbgstr_longlong(id), wine_dbgstr_longlong(offset), status );
 
     return NULL;
 }
@@ -837,10 +841,12 @@ HWND get_desktop_window(void)
     struct user_thread_info *thread_info = get_user_thread_info();
     BOOL is_service;
 
+    ERR( "W6: get_desktop_window enter top_window %p\n", thread_info->top_window );
     if (thread_info->top_window) return thread_info->top_window;
 
     /* don't create an actual explorer desktop window for services */
     is_service = is_service_process();
+    ERR( "W6: is_service %d\n", is_service );
 
     SERVER_START_REQ( get_desktop_window )
     {
