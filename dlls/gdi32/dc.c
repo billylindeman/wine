@@ -204,6 +204,9 @@ static const WCHAR printer_env[] = L"x64";
 static const WCHAR printer_env[] = L"arm";
 #elif defined __aarch64__
 static const WCHAR printer_env[] = L"arm64";
+#elif defined __wasm__
+/* The guest ABI is i386 Windows; the spool path names the guest env (P3.7). */
+static const WCHAR printer_env[] = L"w32x86";
 #else
 #error not defined for this cpu
 #endif

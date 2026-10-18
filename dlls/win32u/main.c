@@ -35,6 +35,10 @@ void *__wine_syscall_dispatcher = NULL;
 /*******************************************************************
  *         syscalls
  */
+/* The asm syscall stubs are the PE-side forwarding layer; the unified
+ * wasm archive resolves the NtUser and NtGdi families directly to the
+ * unix-side implementations instead (P3.7, docs/spikes/p3-win32u.md). */
+#ifndef __wasm__
 #ifdef __arm64ec__
 enum syscall_ids
 {
@@ -2582,6 +2586,7 @@ ALL_SYSCALLS
 #undef SYSCALL_ENTRY
 
 #endif /*  __arm64ec__ */
+#endif /* !__wasm__ */
 
 
 void *dummy = NtQueryVirtualMemory;  /* forced import to avoid link error with winecrt0 */

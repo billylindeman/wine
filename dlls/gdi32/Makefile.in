@@ -1,5 +1,6 @@
 EXTRADEFS = -D_GDI32_
 MODULE    = gdi32.dll
+STATICLIB = libgdi32.a
 IMPORTLIB = gdi32
 IMPORTS   = user32 advapi32 win32u
 DELAYIMPORTS = winspool
