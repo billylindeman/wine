@@ -1604,6 +1604,74 @@ static WINE_MODREF *alloc_module( HMODULE hModule, const UNICODE_STRING *nt_name
 }
 
 
+/******************************************************************
+ *		wineweb_ldr_init_process_defaults (wineweb boot seam, P2.11)
+ *
+ * The LdrInitializeProcess defaults the wasm boot has no other owner for:
+ * the TlsBitmap pair (kernelbase's TlsAlloc/TlsGetValue deref them) and a
+ * minimal ProcessParameters carrying a caller-provided environment block
+ * (kernelbase's GetEnvironmentVariableA walks
+ * Peb->ProcessParameters->Environment through RtlQueryEnvironmentVariable_U's
+ * NULL default). `env_block` is UTF-16, "NAME=value", double-NUL
+ * terminated; it is copied into the process heap. Must run after k32_boot
+ * (the process heap exists) and after the wasm TEB is set. Not exported
+ * through any .spec: callers are the boot.
+ */
+NTSTATUS wineweb_ldr_init_process_defaults( PEB *peb, const WCHAR *cmdline, const WCHAR *env_block )
+{
+    RTL_USER_PROCESS_PARAMETERS *params;
+    ULONG env_len = 0, cmdline_len = 0;
+    WCHAR *env_copy = NULL, *cmdline_copy = NULL;
+
+    /* wineweb: the env block is double-NUL terminated (NAME=value\0 … \0);
+     * a single-NUL walk stops at the end of the FIRST variable, so every
+     * later variable (WINETEST_REPORT_SUCCESS et al) never reached the
+     * guest and the suite's ok lines went unprinted (the P3.2 pass-rate
+     * honesty fix). */
+    if (env_block) { while (env_block[env_len] || env_block[env_len + 1]) env_len++; env_len += 2; }
+    if (cmdline) cmdline_len = wcslen( cmdline ) + 1;
+
+    params = RtlAllocateHeap( GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*params) );
+    if (!params) return STATUS_NO_MEMORY;
+
+    if (env_len)
+    {
+        env_copy = RtlAllocateHeap( GetProcessHeap(), 0, env_len * sizeof(WCHAR) );
+        if (!env_copy) return STATUS_NO_MEMORY;
+        memcpy( env_copy, env_block, env_len * sizeof(WCHAR) );
+        params->Environment = env_copy;
+        params->EnvironmentSize = env_len * sizeof(WCHAR);
+    }
+    if (cmdline_len)
+    {
+        cmdline_copy = RtlAllocateHeap( GetProcessHeap(), 0, cmdline_len * sizeof(WCHAR) );
+        if (!cmdline_copy) return STATUS_NO_MEMORY;
+        memcpy( cmdline_copy, cmdline, cmdline_len * sizeof(WCHAR) );
+        params->CommandLine.Buffer = cmdline_copy;
+        params->CommandLine.Length = (cmdline_len - 1) * sizeof(WCHAR);
+        params->CommandLine.MaximumLength = cmdline_len * sizeof(WCHAR);
+    }
+
+    peb->TlsBitmap = &tls_bitmap;
+    peb->TlsExpansionBitmap = &tls_expansion_bitmap;
+    RtlInitializeBitMap( &tls_bitmap, peb->TlsBitmapBits, sizeof(peb->TlsBitmapBits) * 8 );
+    RtlInitializeBitMap( &tls_expansion_bitmap, peb->TlsExpansionBitmapBits,
+                         sizeof(peb->TlsExpansionBitmapBits) * 8 );
+    /* TLS index 0 is always reserved (LdrInitializeProcess's own contract). */
+    RtlSetBits( peb->TlsBitmap, 0, 1 );
+    RtlSetBits( peb->TlsBitmap, NTDLL_TLS_ERRNO, 1 );
+
+    peb->ProcessParameters = params;
+    /* wineweb: the FastPebLock is the PEB lock every env/locale query takes
+     * (RtlAcquirePebLock ← GetEnvironmentStringsA et al); without it the
+     * boot's first env query enters a NULL critical section and spins
+     * (the P3.0 cs-wait evidence). The static peb_lock above is the same
+     * lock LdrInitializeProcess installs. */
+    peb->FastPebLock = &peb_lock;
+    return STATUS_SUCCESS;
+}
+
+
 #ifdef __wasm__ /* wineweb: the wasm builtin flavor has no PE images to map —
                  * the loader module table is populated from the boot instead
                  * (P2.10). Everything here is Wine's own structures: get_modref,
