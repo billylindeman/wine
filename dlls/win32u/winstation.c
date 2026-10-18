@@ -86,7 +86,20 @@ static struct session_thread_data *get_session_thread_data(void)
 
 void shared_object_acquire_seqlock( const shared_object_t *object, UINT64 *seq )
 {
+#ifdef __wasm__ /* wineweb (patch 0028 W8): a stuck-odd seq spins forever
+                 * (the W8 run-38 hang at the GetClientRect block) — bound
+                 * the spin and name the object loudly instead. */
+    unsigned spins = 0;
+    while ((*seq = ReadNoFence64( &object->seq )) & 1)
+        if (++spins > 1000000)
+        {
+            ERR( "W8: seqlock stuck odd: object %p id %llu seq %llu\n",
+                 (void *)object, (unsigned long long)object->id, (unsigned long long)object->seq );
+            break;
+        }
+#else
     while ((*seq = ReadNoFence64( &object->seq )) & 1) YieldProcessor();
+#endif
     __SHARED_READ_FENCE;
 }
 
@@ -212,12 +225,31 @@ const shared_object_t *find_shared_session_object( object_id_t id, mem_size_t of
     {
         object = (const shared_object_t *)(block->data + offset - block->offset);
         if (id == shared_object_get_id( object )) return object;
+#ifdef __wasm__ /* wineweb (patch 0028 W8): raw values — the %s path prints
+                 * empty for 0, and the run-9 probe showed id 0/8 offset 0 —
+                 * dump the whole raw object header (8 words) to name the writer. */
+        {
+            const volatile unsigned int *raw = (const volatile unsigned int *)object;
+            ERR( "W8: session id mismatch exp %u/%u at off %u/%u obj %u %u %u %u %u %u %u %u\n",
+                 (unsigned)id, (unsigned)(id >> 32), (unsigned)offset, (unsigned)(offset >> 32),
+                 raw[0], raw[1], raw[2], raw[3], raw[4], raw[5], raw[6], raw[7] );
+        }
+#else
         ERR( "W6: session object id mismatch expected %s got %s (offset %s)\n",
              wine_dbgstr_longlong(id), wine_dbgstr_longlong( shared_object_get_id( object )),
              wine_dbgstr_longlong(offset) );
+#endif
     }
-    else ERR( "W6: session block lookup failed id %s offset %s status %#x\n",
-              wine_dbgstr_longlong(id), wine_dbgstr_longlong(offset), status );
+    else
+    {
+#ifdef __wasm__
+        ERR( "W8: session lookup failed id %u/%u off %u/%u status %#x\n",
+             (unsigned)id, (unsigned)(id >> 32), (unsigned)offset, (unsigned)(offset >> 32), status );
+#else
+        ERR( "W6: session block lookup failed id %s offset %s status %#x\n",
+             wine_dbgstr_longlong(id), wine_dbgstr_longlong(offset), status );
+#endif
+    }
 
     return NULL;
 }
@@ -278,6 +310,16 @@ NTSTATUS get_shared_queue( struct object_lock *lock, const queue_shm_t **queue_s
     {
         struct obj_locator locator;
 
+#ifdef __wasm__ /* wineweb (patch 0028 W8): the sync miniserver answers
+                 * get_msg_queue NOT_IMPLEMENTED (no queue_shm_t until the
+                 * P2.2 SAB seam — the usersrv spike's named divergence) —
+                 * cache the absence so the message pump's every peek does
+                 * not re-issue the op (the W8 run-24 spin: 7M diag lines of
+                 * op-114 retries). The queue-bits callers fall back to the
+                 * get_queue_status op, which is the honest path. */
+        static int queue_shm_absent = -1;
+        if (queue_shm_absent > 0) return STATUS_INVALID_HANDLE;
+#endif
         SERVER_START_REQ( get_msg_queue )
         {
             wine_server_call( req );
@@ -286,7 +328,13 @@ NTSTATUS get_shared_queue( struct object_lock *lock, const queue_shm_t **queue_s
         SERVER_END_REQ;
 
         data->shared_queue = find_shared_session_object( locator.id, locator.offset );
-        if (!(object = data->shared_queue)) return STATUS_INVALID_HANDLE;
+        if (!(object = data->shared_queue))
+        {
+#ifdef __wasm__
+            queue_shm_absent = 1;
+#endif
+            return STATUS_INVALID_HANDLE;
+        }
     }
 
     if (!lock->id || !shared_object_release_seqlock( object, lock->seq ))

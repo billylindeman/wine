@@ -481,12 +481,20 @@ static LRESULT dispatch_win_proc_params( struct win_proc_params *params, size_t 
         WARN( "wineweb: ansi WndProc dispatch reached (loud)\n" );
     else
     {
-        ERR( "W6: guest dispatch proc %#x hwnd %p msg %u wp %#x lp %#x\n",
-             (unsigned)(UINT_PTR)params->procW, params->hwnd, params->msg,
+        UINT_PTR proc = (UINT_PTR)params->procW;
+        ERR( "W8: guest dispatch proc %x hwnd %x msg %u wp %x lp %x\n",
+             (unsigned)proc, (unsigned)(UINT_PTR)params->hwnd, params->msg,
              (unsigned)params->wparam, (unsigned)params->lparam );
-        result = wineweb_guest_call( (UINT_PTR)params->procW, (UINT_PTR)params->hwnd,
-                                     params->msg, params->wparam, params->lparam );
-        ERR( "W6: guest dispatch result %#x\n", (unsigned)result );
+        /* The proc is either a guest VA (the image lives at/below the
+         * corridor end) or a builtin's wasm function pointer — those are
+         * small table indices in this toolchain (the W8 run-13 evidence: a
+         * builtin proc fed to wineweb_guest_call lifted garbage). */
+        if (proc >= 0x400000u && proc < 0x20000000u)
+            result = wineweb_guest_call( (unsigned)proc, (unsigned)(UINT_PTR)params->hwnd,
+                                         params->msg, params->wparam, params->lparam );
+        else
+            result = ((WNDPROC)proc)( params->hwnd, params->msg, params->wparam, params->lparam );
+        ERR( "W8: guest dispatch result %x\n", (unsigned)result );
     }
     thread_info->msg_call_depth--;
     return result;
@@ -4443,6 +4451,15 @@ static BOOL process_message( struct send_message_info *info, DWORD_PTR *res_ptr,
 
     if (!(info->dest_tid = get_window_thread( info->hwnd, &dest_pid ))) return FALSE;
     if (is_exiting_thread( info->dest_tid )) return FALSE;
+
+#ifdef __wasm__ /* wineweb (patch 0028 W8): the tid-identity comparison
+                 * site, named loudly. In the single-thread boot a
+                 * same-process send can never be cross-thread — a
+                 * divergence here is the identity wall itself. */
+    if (dest_pid == GetCurrentProcessId() && info->dest_tid != GetCurrentThreadId())
+        ERR( "W8: tid divergence on msg %u: shm entry tid %u vs current tid %u\n",
+             info->msg, info->dest_tid, GetCurrentThreadId() );
+#endif
 
     if (info->params && info->dest_tid == GetCurrentThreadId() &&
         !is_hooked( WH_CALLWNDPROC ) && !is_hooked( WH_CALLWNDPROCRET ) &&

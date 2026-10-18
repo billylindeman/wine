@@ -1690,8 +1690,21 @@ NTSTATUS WINAPI NtRaiseException( EXCEPTION_RECORD *rec, CONTEXT *context, BOOL 
  */
 TEB * WINAPI NtCurrentTeb(void)
 {
+#ifdef __wasm__ /* wineweb (patch 0028 W8): the wasm boot has no unix
+                 * thread_data — pthread_getspecific returns NULL and the
+                 * old body fell through to `return NULL`, so every unix-side
+                 * TEB read (PsGetCurrentThreadId/ProcessId, the loader's pid
+                 * stamp) loaded the null page as 0 (the W8 run-6 probe:
+                 * "teb 0 clientid deadbeef" while __wine_current_teb holds
+                 * the stamped identity). The TEB is the boot's
+                 * __wine_current_teb global — the same source the
+                 * guest-i386 inline in winnt.h uses. */
+    extern struct _TEB *__wine_current_teb;
+    return __wine_current_teb;
+#else
     struct thread_data *data = get_thread_data();
     return data ? data->teb : NULL;
+#endif
 }
 
 

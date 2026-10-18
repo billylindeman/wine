@@ -2478,5 +2478,15 @@ HANDLE WINAPI PsGetCurrentProcessId(void)
  */
 HANDLE WINAPI PsGetCurrentThreadId(void)
 {
+#ifdef __wasm__ /* wineweb (patch 0028 W8): the wasm boot has no unix
+                 * thread_data — get_thread_data() reads the null page and
+                 * the tid comes back 0 (patch 0018's evidence). The win32u
+                 * send/receive paths compare GetCurrentThreadId() against
+                 * the shared user-entry tid, so the identity must be the
+                 * TEB's ClientId.UniqueThread — the same source the boot
+                 * stamps from the miniserver (patch 0027's pid twin). */
+    return ULongToHandle( NtCurrentTeb()->ClientId.UniqueThread );
+#else
     return ULongToHandle( get_thread_data()->tid );
+#endif
 }
