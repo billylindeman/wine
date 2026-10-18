@@ -52,7 +52,15 @@ static int nb_debug_options = -1;
 static int options_size;
 static struct __wine_debug_channel *debug_options;
 static DWORD partial_line_tid;  /* id of the last thread to output a partial line */
-
+#ifdef __wasm__ /* wineweb: the dlopen-style indirection cannot work in the
+                 * unified archive — GetProcAddress returns guest thunk
+                 * addresses, not host function pointers, and calling one
+                 * through a host pointer traps ("null function"). The
+                 * fallbacks ARE the wasm implementation: strdup via the host
+                 * pool and fwrite to the WASI stderr (the driver's console).
+                 * The channel flags keep TRACE silent by default. */
+static void load_func( void **func, const char *name, void *def ) { *func = def; (void)name; }
+#else
 static void load_func( void **func, const char *name, void *def )
 {
     if (!*func)
@@ -64,6 +72,7 @@ static void load_func( void **func, const char *name, void *def )
         SetLastError( err );
     }
 }
+#endif
 #define LOAD_FUNC(name) load_func( (void **)&p ## name, #name, fallback ## name )
 
 
@@ -168,6 +177,64 @@ static void init_options(void)
 }
 
 /* FIXME: this is not 100% thread-safe */
+#ifdef __wasm__ /* wineweb: the fallbacks route through the S2 diag group
+                 * (wineweb_host_log) — the Wine msvcrt stdio (fwrite/stderr)
+                 * is an empty TU on wasm and the wasi fwrite would read the
+                 * zeroed MSVCRT__iob stand-in as a FILE (the "null function"
+                 * trap, docs/spikes/p2-l3gate.md). TRACE stays silent via
+                 * the channel flags; ERR/FIXME reach the driver's console. */
+__attribute__((import_module("wineweb_host"), import_name("log")))
+extern void wineweb_crt0_log(int level, const char *ptr, unsigned len);
+
+static const char * __cdecl fallback__wine_dbg_strdup( const char *str )
+{
+    static char *list[32];
+    static LONG pos;
+    char *ret = _strdup( str );
+    int idx;
+
+    idx = InterlockedIncrement( &pos ) % ARRAY_SIZE(list);
+    free( InterlockedExchangePointer( (void **)&list[idx], ret ));
+    return ret;
+}
+
+static int __cdecl fallback__wine_dbg_output( const char *str )
+{
+    size_t len = strlen( str );
+
+    if (!len) return 0;
+    InterlockedExchange( (LONG *)&partial_line_tid, str[len - 1] != '\n' ? GetCurrentThreadId() : 0 );
+    wineweb_crt0_log( 0 /* info */, str, len );
+    return len;
+}
+
+static int __cdecl fallback__wine_dbg_header( enum __wine_debug_class cls,
+                                              struct __wine_debug_channel *channel,
+                                              const char *function )
+{
+    if (!(__wine_dbg_get_channel_flags( channel ) & (1 << cls))) return -1;
+    return 0; /* the header formatting rides the diag group's plain text */
+}
+
+static unsigned char __cdecl fallback__wine_dbg_get_channel_flags( struct __wine_debug_channel *channel )
+{
+    int min, max, pos, res;
+
+    if (nb_debug_options == -1) init_options();
+
+    min = 0;
+    max = nb_debug_options - 1;
+    while (min <= max)
+    {
+        pos = (min + max) / 2;
+        res = strcmp( channel->name, debug_options[pos].name );
+        if (!res) return debug_options[pos].flags;
+        if (res < 0) max = pos - 1;
+        else min = pos + 1;
+    }
+    return default_flags;
+}
+#else
 static const char * __cdecl fallback__wine_dbg_strdup( const char *str )
 {
     static char *list[32];
@@ -234,6 +301,7 @@ static unsigned char __cdecl fallback__wine_dbg_get_channel_flags( struct __wine
     if (channel->flags & (1 << __WINE_DBCL_INIT)) channel->flags = default_flags;
     return default_flags;
 }
+#endif /* __wasm__ */
 
 const char * __cdecl __wine_dbg_strdup( const char *str )
 {
