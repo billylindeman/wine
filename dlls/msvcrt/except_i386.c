@@ -1,3 +1,6 @@
+#ifdef __wasm__ /* wineweb: guest SEH dispatch is ours (docs 02 §7); the per-arch engines are empty TUs on the wasm flavor. Reaching one of these exports is a loud seam, not silent misbehavior. */
+typedef int msvcrt_except_wasm_placeholder;
+#else
 /*
  * msvcrt C++ exception handling
  *
@@ -927,3 +930,4 @@ int handle_fpieee_flt( __msvcrt_ulong exception_code, EXCEPTION_POINTERS *ep,
 }
 
 #endif  /* __i386__ */
+#endif /* __wasm__ */

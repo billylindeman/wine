@@ -1,3 +1,6 @@
+#ifdef __wasm__ /* wineweb: the FILE-backed stdio surface (printf/fprintf/fwrite family) drags the Wine heap boot into every harness; the guest-facing vsprintf/_vsnprintf (wcs.c) stay. Console/terminal stdio is P3+ — reaching one of these exports is a loud seam, not silent misbehavior. */
+typedef int msvcrt_file_wasm_placeholder;
+#else
 /*
  * msvcrt.dll file functions
  *
@@ -5875,3 +5878,4 @@ int CDECL _get_stream_buffer_pointers(FILE *file, char*** base,
     return 0;
 }
 #endif
+#endif /* __wasm__ */

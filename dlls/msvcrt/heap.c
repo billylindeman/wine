@@ -383,6 +383,7 @@ size_t CDECL _aligned_msize(void *p, size_t alignment, size_t offset)
 /*********************************************************************
  *		calloc (MSVCRT.@)
  */
+#ifndef __wasm__ /* wineweb: the harness allocator (wasi libc) owns malloc — the msvcrt heap exports are not in this block's enabled surface (P2.10) */
 void* CDECL DECLSPEC_HOTPATCH calloc(size_t count, size_t size)
 {
   size_t bytes = count*size;
@@ -395,6 +396,7 @@ void* CDECL DECLSPEC_HOTPATCH calloc(size_t count, size_t size)
 
   return msvcrt_heap_alloc(HEAP_ZERO_MEMORY, bytes);
 }
+#endif
 
 #if _MSVCR_VER>=140
 /*********************************************************************
@@ -409,10 +411,12 @@ void* CDECL _calloc_base(size_t count, size_t size)
 /*********************************************************************
  *		free (MSVCRT.@)
  */
+#ifndef __wasm__ /* wineweb: the harness allocator (wasi libc) owns malloc — the msvcrt heap exports are not in this block's enabled surface (P2.10) */
 void CDECL DECLSPEC_HOTPATCH free(void* ptr)
 {
   msvcrt_heap_free(ptr);
 }
+#endif
 
 #if _MSVCR_VER>=140
 /*********************************************************************
@@ -427,6 +431,7 @@ void CDECL _free_base(void* ptr)
 /*********************************************************************
  *                  malloc (MSVCRT.@)
  */
+#ifndef __wasm__ /* wineweb: the harness allocator (wasi libc) owns malloc — the msvcrt heap exports are not in this block's enabled surface (P2.10) */
 void* CDECL malloc(size_t size)
 {
     void *ret;
@@ -442,6 +447,7 @@ void* CDECL malloc(size_t size)
         *_errno() = ENOMEM;
     return ret;
 }
+#endif
 
 #if _MSVCR_VER>=140
 /*********************************************************************
@@ -456,6 +462,7 @@ void* CDECL _malloc_base(size_t size)
 /*********************************************************************
  *		realloc (MSVCRT.@)
  */
+#ifndef __wasm__ /* wineweb: the harness allocator (wasi libc) owns malloc — the msvcrt heap exports are not in this block's enabled surface (P2.10) */
 void* CDECL DECLSPEC_HOTPATCH realloc(void* ptr, size_t size)
 {
   if (!ptr) return malloc(size);
@@ -463,6 +470,7 @@ void* CDECL DECLSPEC_HOTPATCH realloc(void* ptr, size_t size)
   free(ptr);
   return NULL;
 }
+#endif
 
 #if _MSVCR_VER>=140
 /*********************************************************************

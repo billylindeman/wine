@@ -299,13 +299,13 @@ __ASM_GLOBAL_FUNC( asm_sqrtf, "sqrtss %xmm0, %xmm0; ret" )
  */
 float CDECL MSVCRT_sqrtf( float x )
 {
-#ifndef __i386__
+#if defined(__i386__) || defined(__wasm__) /* wineweb: wasi libm; the per-arch asm square roots don't exist on the wasm flavor (the error-signaling divergence via math_error is recorded in the P2.10 spike) */
+    return sqrtf( x );
+#else
     if (!sqrtf_validate(&x))
         return x;
 
     return asm_sqrtf(x);
-#else
-    return sqrtf( x );
 #endif
 }
 
@@ -454,10 +454,14 @@ __ASM_GLOBAL_FUNC( asm_sqrt,
  */
 double CDECL MSVCRT_sqrt( double x )
 {
+#ifdef __wasm__ /* wineweb: wasi libm (see the sqrtf note) */
+    return sqrt( x );
+#else
     if (!sqrt_validate(&x, TRUE))
         return x;
 
     return asm_sqrt(x);
+#endif
 }
 
 /*********************************************************************
