@@ -68,6 +68,11 @@ struct session_block
     SIZE_T      size;       /* size of the mmaped data */
 };
 
+/* wineweb (patch 0025): the in-module session buffer, provided by the sync
+   miniserver staticlib in the same module (crates/wineweb-miniserver). The
+   buffer never moves (bump-only allocation, no growth). */
+extern const unsigned char *wineweb_shared_session( size_t *size );
+
 static pthread_mutex_t session_lock = PTHREAD_MUTEX_INITIALIZER;
 static struct list session_blocks = LIST_INIT(session_blocks);
 const session_shm_t *shared_session;
@@ -146,6 +151,31 @@ static NTSTATUS find_shared_session_block( SIZE_T offset, SIZE_T size, struct se
 {
     struct session_block *block;
     UINT status;
+
+#ifdef __wasm__ /* wineweb: the sync miniserver owns the session buffer */
+    static struct session_block *wasm_block;
+    if (!wasm_block)
+    {
+        /* The in-module route: map the sync miniserver's session buffer as
+           the one block covering the whole session. Its address is the
+           guest's mapping (the zero-translation contract) and it never
+           moves (the server allocates bump-only, no growth). */
+        size_t session_size = 0;
+        const unsigned char *data = wineweb_shared_session( &session_size );
+        if (data && (wasm_block = calloc( 1, sizeof(*wasm_block) )))
+        {
+            wasm_block->data = (const char *)data;
+            wasm_block->offset = 0;
+            wasm_block->size = session_size;
+            list_add_tail( &session_blocks, &wasm_block->entry );
+        }
+    }
+    if (wasm_block && wasm_block->offset <= offset && offset + size <= wasm_block->offset + wasm_block->size)
+    {
+        *ret = wasm_block;
+        return STATUS_SUCCESS;
+    }
+#endif
 
     assert( offset + size > offset );
 
