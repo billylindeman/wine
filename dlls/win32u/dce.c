@@ -552,6 +552,56 @@ static void *window_surface_get_color( struct window_surface *surface, BITMAPINF
     return gdi_bits.ptr;
 }
 
+/* wineweb: the dxwgpu↔drv present seam (P4.14, patch 0025) — the p414 driver
+ * hands the presented D3D9 swapchain frame (RGBA8888 top-down, the GPU half's
+ * canvas) and this writes it into the window DIB itself, so the DIB stays the
+ * one window truth: GDI drawn after composes over the frame by the normal
+ * flush order. Swizzle: the DIB's 32bpp form is 0x00RRGGBB (bytes B,G,R,0);
+ * the frame is R,G,B,A. `rect` is surface-relative. The flush is the
+ * canonical window_surface_flush (the P3.8 BGRA→RGBA pass back to the
+ * compositor). Returns FALSE when the frame does not fit the DIB. */
+BOOL wineweb_surface_present_frame( struct window_surface *surface, const RECT *rect,
+                                    const uint8_t *rgba )
+{
+    char color_buf[FIELD_OFFSET( BITMAPINFO, bmiColors[256] )];
+    BITMAPINFO *color_info = (BITMAPINFO *)color_buf;
+    uint8_t *bits;
+    UINT w, h, x, y;
+    RECT dirty;
+
+    window_surface_lock( surface );
+    if (!(bits = window_surface_get_color( surface, color_info )))
+    {
+        window_surface_unlock( surface );
+        return FALSE;
+    }
+    w = color_info->bmiHeader.biWidth;
+    h = (UINT)abs( color_info->bmiHeader.biHeight );
+    if (rect->left < 0 || rect->top < 0 || rect->right > (LONG)w || rect->bottom > (LONG)h ||
+        rect->left >= rect->right || rect->top >= rect->bottom)
+    {
+        window_surface_unlock( surface );
+        return FALSE; /* the frame must fit the DIB (the p414 driver's contract) */
+    }
+    dirty = *rect;
+    for (y = 0; y < (UINT)(dirty.bottom - dirty.top); y++)
+    {
+        uint8_t *dst = bits + (size_t)(dirty.top + y) * w * 4 + (size_t)dirty.left * 4;
+        const uint8_t *src = rgba + (size_t)y * (UINT)(dirty.right - dirty.left) * 4;
+        for (x = 0; x < (UINT)(dirty.right - dirty.left); x++)
+        {
+            dst[x * 4 + 0] = src[x * 4 + 2]; /* B */
+            dst[x * 4 + 1] = src[x * 4 + 1]; /* G */
+            dst[x * 4 + 2] = src[x * 4 + 0]; /* R */
+            dst[x * 4 + 3] = 0;              /* the DIB dword is 0x00RRGGBB */
+        }
+    }
+    add_bounds_rect( &surface->bounds, &dirty );
+    window_surface_unlock( surface );
+    window_surface_flush( surface );
+    return TRUE;
+}
+
 struct window_surface *window_surface_create( const struct window_surface_funcs *funcs, HWND hwnd,
                                               const RECT *rect, BITMAPINFO *info, HBITMAP bitmap )
 {

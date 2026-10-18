@@ -46,7 +46,7 @@ extern int32_t wineweb_drv_present(void);
 /* --- guest-hwnd -> drv-handle mapping ------------------------------------- */
 
 #define WWEB_MAX_WINDOWS 16
-static struct { HWND hwnd; uint64_t drv; } wweb_windows[WWEB_MAX_WINDOWS];
+static struct { HWND hwnd; uint64_t drv; struct window_surface *surface; } wweb_windows[WWEB_MAX_WINDOWS];
 
 static BOOL wweb_map(HWND hwnd, uint64_t *drv)
 {
@@ -68,7 +68,26 @@ static void wweb_remove(HWND hwnd)
 {
     unsigned i;
     for (i = 0; i < WWEB_MAX_WINDOWS; i++)
-        if (wweb_windows[i].hwnd == hwnd) { wweb_windows[i].hwnd = 0; wweb_windows[i].drv = 0; }
+        if (wweb_windows[i].hwnd == hwnd) { wweb_windows[i].hwnd = 0; wweb_windows[i].drv = 0; wweb_windows[i].surface = NULL; }
+}
+
+/* P4.14: the D3D9 present path needs the window's own surface — recorded by
+ * the WindowPosChanged driver entry (win32u's delivery of the surface). */
+static void wweb_surface_note( HWND hwnd, struct window_surface *surface )
+{
+    unsigned i;
+    for (i = 0; i < WWEB_MAX_WINDOWS; i++)
+        if (wweb_windows[i].hwnd == hwnd) wweb_windows[i].surface = surface;
+}
+
+static struct window_surface *wineweb_d3d9_window_surface( HWND hwnd )
+{
+    unsigned i;
+    for (i = 0; i < WWEB_MAX_WINDOWS; i++)
+        if (wweb_windows[i].hwnd == hwnd && wweb_windows[i].surface &&
+            wweb_windows[i].surface != &dummy_surface)
+            return wweb_windows[i].surface;
+    return NULL;
 }
 
 /* --- the window surface ---------------------------------------------------- */
@@ -244,8 +263,37 @@ LOUD_STUB( void,    Beep, (void), (), )
 LOUD_STUB( void,    ThreadDetach, (void), (), )
 LOUD_STUB( BOOL,    CreateDesktop, (const WCHAR *name, UINT w, UINT h), (name, w, h), FALSE )
 LOUD_STUB( BOOL,    GetWindowStyleMasks, (HWND hwnd, UINT style, UINT ex_style, UINT *style_mask, UINT *ex_style_mask), (hwnd, style, ex_style, style_mask, ex_style_mask), FALSE )
-LOUD_STUB( void,    WindowPosChanged, (HWND hwnd, HWND insert_after, HWND owner, UINT swp_flags, const struct window_rects *rects, struct window_surface *surface), (hwnd, insert_after, owner, swp_flags, rects, surface), )
 LOUD_STUB( BOOL,    WindowPosChanging, (HWND hwnd, UINT swp_flags, BOOL shaped, const struct window_rects *rects), (hwnd, swp_flags, shaped, rects), FALSE )
+
+/* P4.14: record the window's surface for the D3D9 present path (the loud
+ * stub it replaces carried no state). Everything else about the position
+ * walk stays client-side, as before. */
+static void wweb_WindowPosChanged( HWND hwnd, HWND insert_after, HWND owner, UINT swp_flags,
+                                   const struct window_rects *rects, struct window_surface *surface )
+{
+    if (surface && surface != &dummy_surface) wweb_surface_note( hwnd, surface );
+}
+
+/* --- the dxwgpu↔drv present seam (P4.14, docs/spikes/p4-d3d9-attach.md) ----
+ *
+ * The p414 driver calls this after the GPU half presents: the D3D9 swapchain
+ * frame (RGBA8888 top-down, w*h*4) is written into the window's own DIB and
+ * flushed — the DIB is the one window truth, so a GDI overlay drawn after
+ * (the composition-order leg) composes over the frame through the normal
+ * flush path. Loud-unsupported when the hwnd was never surface-registered
+ * through this adapter. */
+int32_t wineweb_d3d9_present_frame( HWND hwnd, const uint8_t *rgba, UINT w, UINT h )
+{
+    struct window_surface *surface = wineweb_d3d9_window_surface( hwnd );
+    RECT rect;
+
+    if (!surface) return -1;
+    rect.left = 0;
+    rect.top = 0;
+    rect.right = (LONG)w;
+    rect.bottom = (LONG)h;
+    return wineweb_surface_present_frame( surface, &rect, rgba ) ? 0 : -2;
+}
 
 static const struct user_driver_funcs wineweb_user_driver =
 {
@@ -266,7 +314,7 @@ static const struct user_driver_funcs wineweb_user_driver =
     .pThreadDetach = nodrv_ThreadDetach,
     .pCreateDesktop = nodrv_CreateDesktop,
     .pGetWindowStyleMasks = nodrv_GetWindowStyleMasks,
-    .pWindowPosChanged = nodrv_WindowPosChanged,
+    .pWindowPosChanged = wweb_WindowPosChanged,
     .pWindowPosChanging = nodrv_WindowPosChanging,
 };
 
