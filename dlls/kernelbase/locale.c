@@ -5592,6 +5592,21 @@ BOOL WINAPI DECLSPEC_HOTPATCH GetCPInfo( UINT codepage, CPINFO *cpinfo )
 
     if (!cpinfo || !(table = get_codepage_table( codepage )))
     {
+#ifdef __wasm__ /* wineweb: the NLS data sections arrive through the server
+                 * (P6); until then, synthesize a minimal SBCS table so the
+                 * CRT locale boot completes. Correct for ASCII/Latin-1-style
+                 * single-byte codepages; DBCS codepages are wrong and their
+                 * tests record the failure (docs/spikes/p2-l3gate.md). */
+        if (!cpinfo)
+        {
+            SetLastError( ERROR_INVALID_PARAMETER );
+            return FALSE;
+        }
+        cpinfo->MaxCharSize = 1;
+        cpinfo->DefaultChar[0] = '?';
+        memset( cpinfo->LeadByte, 0, sizeof(cpinfo->LeadByte) );
+        return TRUE;
+#endif
         SetLastError( ERROR_INVALID_PARAMETER );
         return FALSE;
     }
