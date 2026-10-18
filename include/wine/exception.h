@@ -99,6 +99,11 @@ extern "C" {
 
 #ifdef __i386__
 typedef struct { int reg[16]; } __wine_jmp_buf;
+#elif defined(__wasm__)
+/* wasm: opaque jmp_buf (wasi SjLj, needs -mllvm -wasm-enable-sjlj and an
+ * engine implementing the exception-handling proposal, e.g. V8) */
+#include <setjmp.h>
+typedef jmp_buf __wine_jmp_buf;
 #elif defined(__x86_64__)
 typedef struct { DECLSPEC_ALIGN(16) struct { unsigned __int64 Part[2]; } reg[16]; } __wine_jmp_buf;
 #elif defined(__arm__)

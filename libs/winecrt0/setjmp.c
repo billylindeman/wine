@@ -27,6 +27,10 @@
  */
 
 #include <stdarg.h>
+#if !defined(__i386__) && !defined(__x86_64__) && !defined(__arm__) && !defined(__aarch64__) && !defined(__arm64ec__)
+/* the generic fallback below uses the C library setjmp; the asm paths don't */
+#include <setjmp.h>
+#endif
 #include "excpt.h"
 #undef USE_COMPILER_EXCEPTIONS
 #undef GetExceptionInformation
@@ -244,12 +248,12 @@ __ASM_GLOBAL_FUNC( __wine_longjmp,
 
 int __cdecl __wine_setjmpex( __wine_jmp_buf *buf, EXCEPTION_REGISTRATION_RECORD *frame )
 {
-    return setjmp( buf );
+    return setjmp( *buf );
 }
 
 void __cdecl __wine_longjmp( __wine_jmp_buf *buf, int retval )
 {
-    for (;;) longjmp( buf, retval );
+    for (;;) longjmp( *buf, retval );
 }
 
 #endif
