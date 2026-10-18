@@ -3,6 +3,7 @@ MODULE    = ucrtbase.dll
 IMPORTLIB = ucrtbase
 IMPORTS   = $(MUSL_PE_LIBS) ntdll
 DELAYIMPORTS = advapi32 user32
+STATICLIB = libucrtbase.a
 PARENTSRC = ../msvcrt
 
 VER_FILEDESCRIPTION_STR = "Wine runtime library"
