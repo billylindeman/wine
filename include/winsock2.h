@@ -626,7 +626,15 @@ typedef struct WS(fd_set)
 {
     WS(u_int) fd_count;
     SOCKET fd_array[WS(FD_SETSIZE)];
+#ifdef __wasi__
+/* wasi-libc defines the fd_set accessors (FD_SET et al.) as static inline
+ * functions, not macros — #undef cannot remove them and the unix side never
+ * uses Wine's fd_set type (it uses the system fd_set; PE-side builds don't
+ * see this header on wasm). */
+} WS(fd_set);
+#else
 } WS(fd_set), FD_SET, *PFD_SET, *LPFD_SET;
+#endif
 
 #endif
 

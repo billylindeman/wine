@@ -43,6 +43,9 @@ typedef struct
 
 #ifdef __i386__
 static const WORD current_machine = IMAGE_FILE_MACHINE_I386;
+#elif defined(__WINE_GUEST_I386__)
+/* core32: wasm builtins present the i386 guest ABI (winnt.h guest branch) */
+static const WORD current_machine = IMAGE_FILE_MACHINE_I386;
 #elif defined(__x86_64__)
 static const WORD current_machine = IMAGE_FILE_MACHINE_AMD64;
 #elif defined(__arm__)
@@ -356,9 +359,12 @@ extern void signal_disable_syscall_dispatch(void);
 extern void signal_init_process( TEB *teb );
 extern void DECLSPEC_NORETURN signal_start_thread( PRTL_THREAD_START_ROUTINE entry, void *arg, TEB *teb );
 extern SYSTEM_SERVICE_TABLE KeServiceDescriptorTable[4];
+#ifndef __wasm__ /* the per-arch asm dispatchers are empty TUs on wasm; the
+                  * DLL side's pointer variables use these names instead */
 extern void __wine_syscall_dispatcher(void);
 extern void __wine_syscall_dispatcher_return(void);
 extern void __wine_unix_call_dispatcher(void);
+#endif
 extern NTSTATUS signal_set_full_context( CONTEXT *context );
 extern NTSTATUS get_thread_wow64_context( HANDLE handle, void *ctx, ULONG size );
 extern NTSTATUS set_thread_wow64_context( HANDLE handle, const void *ctx, ULONG size );
