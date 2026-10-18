@@ -1,5 +1,6 @@
 EXTRADEFS = -D_SHELL32_
 MODULE    = shell32.dll
+STATICLIB = libshell32.a
 IMPORTLIB = shell32
 IMPORTS   = uuid shlwapi user32 gdi32 advapi32
 DELAYIMPORTS = ole32 oleaut32 shdocvw version comctl32 comdlg32 gdiplus
