@@ -166,6 +166,7 @@ case "$host_cpu" in
   arm*)            HOST_ARCH=arm ;;
   i[[3456789]]86*) HOST_ARCH=i386 ;;
   x86_64)          HOST_ARCH=x86_64 ;;
+  wasm32)          HOST_ARCH=unknown ;;
 esac
 m4_set_add_all([_AC_SUBST_VARS],[HOST_ARCH]m4_foreach([cpu],[aarch64,arm,arm64ec,i386,x86_64],
                                 [m4_foreach([var],[CC,CXX,CFLAGS,CXXFLAGS,EXTRACFLAGS,EXTRACXXFLAGS,LDFLAGS,DEBUG,TARGET,STRIP,DELAYLOADFLAG],[,cpu[_]var])]))
@@ -215,7 +216,13 @@ AC_SUBST(SED_CMD,["LC_ALL=C sed -e 's,@bindir@,\${bindir},g' -e 's,@PACKAGE_STRI
 
 if test -n "$host_alias" -a "$host_alias" != "$build_alias"
 then
-    TARGETFLAGS="-b $host_alias $TARGETFLAGS"
+    dnl wasm32/wasm64 hosts: the unix-side CC is already the wasm cross-compiler,
+    dnl and winebuild has no wasm target (get_cpu_from_name in tools/tools.h);
+    dnl wasm builtins are plain static libs called through thunks, so no -b flag.
+    case $host_cpu in
+      wasm*) ;;
+      *) TARGETFLAGS="-b $host_alias $TARGETFLAGS" ;;
+    esac
 fi
 
 dnl Check for flex
@@ -389,7 +396,11 @@ AS_VAR_SET_IF([enable_archs],
      done],
     [cross_archs=$HOST_ARCH
      case $HOST_ARCH-$host_os in
-       unknown-*) PE_ARCHS=none ;;
+       dnl Unknown CPUs (wasm32/wasm64): no PE side, but keep the native
+       dnl (PE_ARCHS empty) semantics — arch 0 sources are built with $CC,
+       dnl which is the wasm-builtin flavor's whole point. PE_ARCHS=none
+       dnl would skip plain module sources in makedep (archs.count > 1).
+       unknown-*) cross_archs= PE_ARCHS= ;;
        *-mingw32*) AS_VAR_SET(${HOST_ARCH}_CC,$CC) ;;
        x86_64-darwin*|arm-*|aarch64-*|*-cygwin*) AS_VAR_IF([with_mingw],[no],
                  [AC_MSG_ERROR([The --without-mingw option is not supported on $HOST_ARCH-$host_os.])]) ;;
@@ -825,6 +836,19 @@ AC_CHECK_HEADERS([sys/sysctl.h],,,
      #endif])
 CFLAGS=$saved_sysctl_h_CFLAGS
 
+dnl core32 (wasm): the wineweb shim supplies <sys/statfs.h>, <pwd.h> and
+dnl (with _WASI_EMULATED_PROCESS_CLOCKS from EXTRACFLAGS) <sys/resource.h>
+dnl and <sys/times.h>, so the probes above miss headers the unix side has.
+dnl State the wasm platform's real header set here; the probes may not see it.
+case $host_cpu in
+  wasm32)
+    AC_DEFINE([HAVE_SYS_STATFS_H], [1], [Define to 1 if you have the <sys/statfs.h> header file.])
+    AC_DEFINE([HAVE_SYS_RESOURCE_H], [1], [Define to 1 if you have the <sys/resource.h> header file.])
+    AC_DEFINE([HAVE_SYS_TIMES_H], [1], [Define to 1 if you have the <sys/times.h> header file.])
+    AC_DEFINE([HAVE_PWD_H], [1], [Define to 1 if you have the <pwd.h> header file.])
+    ;;
+esac
+
 AC_CHECK_HEADERS(\
 	netinet/ip.h \
 	net/if.h \
@@ -957,6 +981,18 @@ AC_SUBST(LDDLLFLAGS,"")
 AC_SUBST(LDEXECFLAGS,"")
 AC_SUBST(EXTRACFLAGS,"")
 AC_SUBST(UNIXDLLFLAGS,"-fPIC")
+
+dnl core32: wasm builtins present the i386 guest ABI to Wine's headers (guest
+dnl CONTEXT etc., see winnt.h); must come after AC_SUBST resets EXTRACFLAGS
+dnl wasm unix side: wasi-libc gates its POSIX shims (signal/mman) behind
+dnl opt-in defines; the wineweb shim implements the real semantics on top
+dnl (dlls/ntdll/unix/wineweb/) and overrides the emu libs at final link.
+dnl _WASI_EMULATED_PROCESS_CLOCKS is required for <sys/resource.h> (rlimit
+dnl needs no emulation; the flag only unlocks the header) and
+dnl _WASI_EMULATED_GETPID un-deprecates getpid (our shim owns its semantics).
+case $host_cpu in
+  wasm32) EXTRACFLAGS="$EXTRACFLAGS -D__WINE_GUEST_I386__ -D_WASI_EMULATED_SIGNAL -D_WASI_EMULATED_MMAN -D_WASI_EMULATED_PROCESS_CLOCKS -D_WASI_EMULATED_GETPID -fno-pic" ;;
+esac
 AC_SUBST(UNIXLDFLAGS,["-shared -Wl,-Bsymbolic -Wl,-soname,\$(UNIXLIB)"])
 AC_SUBST(TOP_INSTALL_LIB,"")
 AC_SUBST(TOP_INSTALL_DEV,"")
@@ -1060,6 +1096,13 @@ case $host_os in
         DLLFLAGS="$DLLFLAGS -fno-PIC"
         LDDLLFLAGS="-fno-PIC"
         WINE_TRY_CFLAGS([-fno-PIC -Wl,-z,notext],[LDDLLFLAGS="$LDDLLFLAGS -Wl,-z,notext"])
+    elif test $HOST_ARCH = unknown
+    then
+        dnl wasm builtins are static archives, never .so — GOT-based PIC
+        dnl addressing split cross-object data/TLS seams (P2.9); the whole
+        dflnl module links with plain linear addressing.
+        DLLFLAGS="$DLLFLAGS -fno-PIC"
+        LDDLLFLAGS="-fno-PIC"
     else
         DLLFLAGS="$DLLFLAGS -fPIC"
         LDDLLFLAGS="-fPIC"
@@ -2011,8 +2054,15 @@ void a(int b, ...) { __builtin_ms_va_list list; __builtin_ms_va_start(list,b); }
               CFLAGS=$saved_CFLAGS])
       AS_VAR_IF([ac_cv_mabi_ms],[yes],
                 [MSVCRTFLAGS="$MSVCRTFLAGS -mabi=ms"],
-                [test -n "$PE_ARCHS" || AC_MSG_ERROR([The compiler doesn't support -mabi=ms. Use gcc instead of clang, or install mingw-w64.])
-                 DLLEXT=""])
+                [case $host_cpu in
+                   wasm*) dnl wineweb wasm-builtin flavor: builtins are reached
+                          dnl through FEX thunk pages (docs 04 §3), never with
+                          dnl ms_abi varargs, so keep the .so-builtin model
+                          dnl (DLLEXT) without -mabi=ms.
+                          ;;
+                   *) test -n "$PE_ARCHS" || AC_MSG_ERROR([The compiler doesn't support -mabi=ms. Use gcc instead of clang, or install mingw-w64.])
+                      DLLEXT="" ;;
+                 esac])
     fi
   fi
 
@@ -2026,6 +2076,12 @@ void a(int b, ...) { __builtin_ms_va_list list; __builtin_ms_va_start(list,b); }
 
   AS_VAR_IF([enable_build_id],[yes],[WINE_TRY_CFLAGS([-Wl,--build-id],[LDFLAGS="$LDFLAGS -Wl,--build-id"])])
 fi
+
+dnl wasm: wasi SjLj needs the EH proposal enabled in codegen (see
+dnl wine/exception.h); harmless for code that doesn't use setjmp
+case $host_cpu in
+  wasm32) EXTRACFLAGS="$EXTRACFLAGS -mllvm -wasm-enable-sjlj" ;;
+esac
 
 dnl **** Disable Fortify, it has too many false positives
 
