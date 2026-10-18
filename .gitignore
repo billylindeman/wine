@@ -1,0 +1,6 @@
+
+# wineweb: in-tree generated server-protocol headers (regenerated from the
+# patched server/protocol.def by the wasm build; T1, docs/t1-build-transition.md)
+/include/wine/server_protocol.h
+/server/request_handlers.h
+/server/request_trace.h
