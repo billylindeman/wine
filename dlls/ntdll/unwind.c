@@ -19,7 +19,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#ifndef __i386__
+#if !defined(__i386__) && !defined(__WINE_GUEST_I386__)
 
 #include <stdlib.h>
 #include <stdarg.h>

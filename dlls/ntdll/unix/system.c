@@ -822,6 +822,78 @@ void init_shared_data_cpuinfo( KUSER_SHARED_DATA *data )
 #endif
 }
 
+#elif defined(__wasm__)
+
+/* wasm guest: no CPUID — the CPU model is the wineweb baseline (the FEX
+ * HostFeatures shape, docs/02 §8), read through the shim's cpu hook. */
+
+#include "wineweb_shim.h"
+
+static void baseline_features( BOOLEAN *pf )
+{
+    struct wineweb_cpu_model model;
+    unsigned int i;
+
+    memset( pf, 0, sizeof(pf) );
+    wineweb_shim_cpu_model( &model );
+    for (i = 0; i < PROCESSOR_FEATURE_MAX; ++i)
+        if (model.pf_bits[i / 64] & ((UINT64)1 << (i % 64))) pf[i] = TRUE;
+}
+
+static void init_cpu_model(void)
+{
+    struct wineweb_cpu_model model;
+
+    wineweb_shim_cpu_model( &model );
+    memcpy( cpu_vendor, model.vendor, sizeof(model.vendor) );
+    memcpy( cpu_name, model.brand, sizeof(model.brand) );
+    cpu_level = model.family;
+    cpu_revision = (model.model << 8) | model.stepping;
+    /* leaf-1 eax in the x86 encoding (no ext family/model in the baseline);
+     * edx stays 0 — the baseline reports features through ProcessorFeatures
+     * only, there is no CPUID feature register on wasm. */
+    cpu_id = ((model.family & 0xf) << 8) | ((model.model & 0xf) << 4) | (model.stepping & 0xf);
+}
+
+static ULONGLONG get_cpu_features(void)
+{
+    /* The same KF_* mapping as the i386 branch (Geoff Chappell's documentation),
+     * driven solely by the fixed baseline — no unconditional x86 bits, and no
+     * dependence on the user_shared_data init order. */
+    BOOLEAN pf[PROCESSOR_FEATURE_MAX];
+    ULONGLONG features = 0;
+
+    baseline_features( pf );
+
+    if (pf[PF_RDTSC_INSTRUCTION_AVAILABLE])   features |= 0x00000002;  /* tsc */
+    if (pf[PF_COMPARE_EXCHANGE_DOUBLE])       features |= 0x00000080;  /* cx8 */
+    if (pf[PF_MMX_INSTRUCTIONS_AVAILABLE])    features |= 0x00000100;  /* mmx */
+    if (pf[PF_XMMI_INSTRUCTIONS_AVAILABLE])   features |= 0x00042800;  /* sse | fxsr | clfsh */
+    if (pf[PF_XMMI64_INSTRUCTIONS_AVAILABLE]) features |= 0x00010000;  /* sse2 */
+    if (pf[PF_SSE3_INSTRUCTIONS_AVAILABLE])   features |= 0x00080000;  /* sse3 */
+    if (pf[PF_RDRAND_INSTRUCTION_AVAILABLE])  features |= 0x02000000;  /* rdrand */
+    if (pf[PF_NX_ENABLED])                    features |= 0x20000000;  /* nx */
+    if (pf[PF_RDTSCP_INSTRUCTION_AVAILABLE])  features |= 0x100000000; /* rdtscp */
+    if (pf[PF_3DNOW_INSTRUCTIONS_AVAILABLE])  features |= 0x00004000;  /* 3dnow */
+    if (pf[PF_VIRT_FIRMWARE_ENABLED])         features |= 0x0c000000;  /* vmx */
+
+    if (!strcmp( cpu_vendor, "GenuineIntel" ))      features |= 0x008000000; /* intel */
+    else if (!strcmp( cpu_vendor, "AuthenticAMD" )) features |= 0x001000000; /* amd */
+    return features;
+}
+
+void init_shared_data_cpuinfo( KUSER_SHARED_DATA *data )
+{
+    BOOLEAN pf[PROCESSOR_FEATURE_MAX];
+    unsigned int i;
+
+    baseline_features( pf );
+    for (i = 0; i < PROCESSOR_FEATURE_MAX; ++i)
+        data->ProcessorFeatures[i] = pf[i];
+    /* No XState: wasm has no xsave area; the guest CONTEXT's extended
+     * registers are the dispatch's property (docs/02 §7). */
+}
+
 #endif /* End architecture specific feature detection for CPUs */
 
 static BOOL grow_logical_proc_buf(void)
