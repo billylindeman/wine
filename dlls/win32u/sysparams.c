@@ -2893,7 +2893,7 @@ void reset_monitor_update_serial(void)
  */
 static BOOL wweb_lock_display_devices( UINT64 serial )
 {
-    extern void wineweb_screen_size( unsigned int *w, unsigned int *h );
+    extern int wineweb_screen_size( unsigned int *w, unsigned int *h );
     static const DEVMODEW mode_template =
     {
         .dmSize = sizeof(DEVMODEW),
