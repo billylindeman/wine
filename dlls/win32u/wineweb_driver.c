@@ -46,7 +46,7 @@ extern int32_t wineweb_drv_present(void);
 /* --- guest-hwnd -> drv-handle mapping ------------------------------------- */
 
 #define WWEB_MAX_WINDOWS 16
-static struct { HWND hwnd; uint64_t drv; struct window_surface *surface; } wweb_windows[WWEB_MAX_WINDOWS];
+static struct { HWND hwnd; uint64_t drv; struct window_surface *surface; uint32_t w, h; } wweb_windows[WWEB_MAX_WINDOWS];
 
 static BOOL wweb_map(HWND hwnd, uint64_t *drv)
 {
@@ -56,11 +56,11 @@ static BOOL wweb_map(HWND hwnd, uint64_t *drv)
     return FALSE;
 }
 
-static BOOL wweb_add(HWND hwnd, uint64_t drv)
+static BOOL wweb_add(HWND hwnd, uint64_t drv, UINT w, UINT h)
 {
     unsigned i;
     for (i = 0; i < WWEB_MAX_WINDOWS; i++)
-        if (!wweb_windows[i].hwnd) { wweb_windows[i].hwnd = hwnd; wweb_windows[i].drv = drv; return TRUE; }
+        if (!wweb_windows[i].hwnd) { wweb_windows[i].hwnd = hwnd; wweb_windows[i].drv = drv; wweb_windows[i].w = w; wweb_windows[i].h = h; return TRUE; }
     return FALSE;
 }
 
@@ -68,7 +68,7 @@ static void wweb_remove(HWND hwnd)
 {
     unsigned i;
     for (i = 0; i < WWEB_MAX_WINDOWS; i++)
-        if (wweb_windows[i].hwnd == hwnd) { wweb_windows[i].hwnd = 0; wweb_windows[i].drv = 0; wweb_windows[i].surface = NULL; }
+        if (wweb_windows[i].hwnd == hwnd) { wweb_windows[i].hwnd = 0; wweb_windows[i].drv = 0; wweb_windows[i].surface = NULL; wweb_windows[i].w = 0; wweb_windows[i].h = 0; }
 }
 
 /* P4.14: the D3D9 present path needs the window's own surface — recorded by
@@ -138,6 +138,20 @@ static BOOL wweb_surface_flush( struct window_surface *surface, const RECT *rect
      * path's flush_window_surfaces, long after the create walk completed)
      * publishes the initial content. */
     if (!wweb_map( s->hwnd, &s->drv )) return FALSE;
+    /* The surface rect is rounded up to a 128 multiple (get_surface_rect's
+     * resize-avoidance) while the drv window is the exact window rect: clip
+     * the flush to what the drv surface can hold (wineweb_drv_surface_write
+     * rejects sub-rects beyond it). */
+    {
+        unsigned i;
+        for (i = 0; i < WWEB_MAX_WINDOWS; i++)
+            if (wweb_windows[i].hwnd == s->hwnd)
+            {
+                if (x_end > (LONG)wweb_windows[i].w) x_end = (LONG)wweb_windows[i].w;
+                if (y_end > (LONG)wweb_windows[i].h) y_end = (LONG)wweb_windows[i].h;
+                break;
+            }
+    }
     if (dirty->left < 0 || dirty->top < 0 || surface_w == 0) return FALSE;
     x_end = min( dirty->right, surface->rect.right );
     y_end = min( dirty->bottom, surface->rect.bottom );
@@ -230,7 +244,8 @@ static BOOL wweb_CreateWindow( HWND hwnd )
 
     if (wineweb_drv_create_window( rect.left, rect.top, rect.right - rect.left,
                                    rect.bottom - rect.top, title_utf8, i, &drv ) != 0) return FALSE;
-    if (!wweb_add( hwnd, drv )) { wineweb_drv_destroy_window( drv ); return FALSE; }
+    if (!wweb_add( hwnd, drv, rect.right - rect.left, rect.bottom - rect.top ))
+        { wineweb_drv_destroy_window( drv ); return FALSE; }
     /* The create-time visibility truth: pCreateWindow is the LAST driver call
      * of the create walk, and a window created with WS_VISIBLE never takes
      * another pos walk before the message loop (show_window's SW_SHOW case
@@ -289,7 +304,16 @@ LOUD_STUB( void,    Beep, (void), (), )
 LOUD_STUB( void,    ThreadDetach, (void), (), )
 LOUD_STUB( BOOL,    CreateDesktop, (const WCHAR *name, UINT w, UINT h), (name, w, h), FALSE )
 LOUD_STUB( BOOL,    GetWindowStyleMasks, (HWND hwnd, UINT style, UINT ex_style, UINT *style_mask, UINT *ex_style_mask), (hwnd, style, ex_style, style_mask, ex_style_mask), FALSE )
-LOUD_STUB( BOOL,    WindowPosChanging, (HWND hwnd, UINT swp_flags, BOOL shaped, const struct window_rects *rects), (hwnd, swp_flags, shaped, rects), FALSE )
+/* The pos-walk surface gate (get_window_surface's `needs_surface`): win32u
+ * asks the driver to accept the position walk before building the window
+ * surface. The compositor clips against the window rect itself (the
+ * wineweb_surface set_clip is a no-op) — accept, no rect edits. The loud
+ * stub's FALSE refused every surface, so no window surface ever existed and
+ * wweb_surface_flush never ran (the p38 T2 wall 2). */
+static BOOL wweb_WindowPosChanging( HWND hwnd, UINT swp_flags, BOOL shaped, const struct window_rects *rects )
+{
+    return TRUE;
+}
 
 /* P4.14: record the window's surface for the D3D9 present path (the loud
  * stub it replaced carried no state). Everything else about the position
@@ -351,7 +375,7 @@ static const struct user_driver_funcs wineweb_user_driver =
     .pCreateDesktop = nodrv_CreateDesktop,
     .pGetWindowStyleMasks = nodrv_GetWindowStyleMasks,
     .pWindowPosChanged = wweb_WindowPosChanged,
-    .pWindowPosChanging = nodrv_WindowPosChanging,
+    .pWindowPosChanging = wweb_WindowPosChanging,
 };
 
 const struct user_driver_funcs *wineweb_user_driver_funcs(void)
