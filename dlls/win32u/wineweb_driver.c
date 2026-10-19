@@ -95,6 +95,7 @@ static struct window_surface *wineweb_d3d9_window_surface( HWND hwnd )
 struct wweb_surface
 {
     struct window_surface header;
+    HWND hwnd;         /* the guest window — the drv handle resolves at flush */
     uint64_t drv;      /* the host half's handle */
     uint32_t stride;   /* bytes per row of the DIB */
 };
@@ -129,6 +130,14 @@ static BOOL wweb_surface_flush( struct window_surface *surface, const RECT *rect
     uint8_t *dst;
     uint32_t len;
 
+    /* The drv handle resolves here, not at surface creation: the create walk
+     * builds the window surface BEFORE WM_NCCREATE/WM_CREATE/pCreateWindow
+     * (window.c's initial apply_window_pos), so the drv window does not exist
+     * yet when the adapter is asked for the surface. Returning FALSE keeps
+     * the dirty bounds — the next flush (the first is the GetMessageW wait
+     * path's flush_window_surfaces, long after the create walk completed)
+     * publishes the initial content. */
+    if (!wweb_map( s->hwnd, &s->drv )) return FALSE;
     if (dirty->left < 0 || dirty->top < 0 || surface_w == 0) return FALSE;
     x_end = min( dirty->right, surface->rect.right );
     y_end = min( dirty->bottom, surface->rect.bottom );
@@ -168,10 +177,8 @@ static BOOL wweb_CreateWindowSurface( HWND hwnd, BOOL layered, const RECT *rect,
     } bmi;
     struct window_surface *surf;
     struct wweb_surface *ws;
-    uint64_t drv = 0;
     UINT width = rect->right - rect->left, height = rect->bottom - rect->top;
 
-    if (!wweb_map( hwnd, &drv )) return FALSE; /* no drv window (not created) */
     memset( &bmi, 0, sizeof(bmi) );
     bmi.info.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
     bmi.info.bmiHeader.biWidth       = width;
@@ -183,7 +190,10 @@ static BOOL wweb_CreateWindowSurface( HWND hwnd, BOOL layered, const RECT *rect,
 
     if (!(surf = window_surface_create( &wweb_surface_funcs, hwnd, rect, &bmi.info, 0 ))) return FALSE;
     ws = (struct wweb_surface *)surf;
-    ws->drv = drv;
+    ws->hwnd = hwnd;
+    /* The drv handle resolves at flush (the surface is built before
+     * pCreateWindow on the create walk); take it now when it exists. */
+    wweb_map( hwnd, &ws->drv );
     ws->stride = width * 4;
     /* The initial DIB content is the window's own state (win32u's 0xff init =
      * the COLOR_WINDOW+1 white the class brush would paint): mark it dirty so
