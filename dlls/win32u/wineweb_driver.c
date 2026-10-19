@@ -185,6 +185,14 @@ static BOOL wweb_CreateWindowSurface( HWND hwnd, BOOL layered, const RECT *rect,
     ws = (struct wweb_surface *)surf;
     ws->drv = drv;
     ws->stride = width * 4;
+    /* The initial DIB content is the window's own state (win32u's 0xff init =
+     * the COLOR_WINDOW+1 white the class brush would paint): mark it dirty so
+     * the first flush publishes it — the T2 initial paint rides win32u's own
+     * flush machinery (flush_window_surfaces on the GetMessageW wait path),
+     * no fabricated pixels. */
+    window_surface_lock( surf );
+    surf->bounds = surf->rect;
+    window_surface_unlock( surf );
     *surface = surf;
     return TRUE;
 }
@@ -213,6 +221,14 @@ static BOOL wweb_CreateWindow( HWND hwnd )
     if (wineweb_drv_create_window( rect.left, rect.top, rect.right - rect.left,
                                    rect.bottom - rect.top, title_utf8, i, &drv ) != 0) return FALSE;
     if (!wweb_add( hwnd, drv )) { wineweb_drv_destroy_window( drv ); return FALSE; }
+    /* The create-time visibility truth: pCreateWindow is the LAST driver call
+     * of the create walk, and a window created with WS_VISIBLE never takes
+     * another pos walk before the message loop (show_window's SW_SHOW case
+     * `goto done`s on was_visible, so pShowWindow never fires — the p38 T2
+     * wall: the notepad frame sat vis=0 in the drv table). win32u's own style
+     * state decides; later flips ride pWindowPosChanged below. */
+    if (NtUserGetWindowLongW( hwnd, GWL_STYLE ) & WS_VISIBLE)
+        wineweb_drv_show_window( drv, 1 );
     return TRUE;
 }
 
@@ -266,12 +282,22 @@ LOUD_STUB( BOOL,    GetWindowStyleMasks, (HWND hwnd, UINT style, UINT ex_style, 
 LOUD_STUB( BOOL,    WindowPosChanging, (HWND hwnd, UINT swp_flags, BOOL shaped, const struct window_rects *rects), (hwnd, swp_flags, shaped, rects), FALSE )
 
 /* P4.14: record the window's surface for the D3D9 present path (the loud
- * stub it replaces carried no state). Everything else about the position
- * walk stays client-side, as before. */
+ * stub it replaced carried no state). Everything else about the position
+ * walk stays client-side, as before.
+ *
+ * Plus the visibility route (the p38 T2 wall): a driver learns map/unmap
+ * from the pos walk — the X11 shape (X11DRV_WindowPosChanged reads the style
+ * and maps). pShowWindow only fires on the min/max placement path (show_window
+ * calls it solely when window_min_maximize filled newPos), so the plain
+ * show/hide rides here: win32u's own WS_VISIBLE state decides, idempotently. */
 static void wweb_WindowPosChanged( HWND hwnd, HWND insert_after, HWND owner, UINT swp_flags,
                                    const struct window_rects *rects, struct window_surface *surface )
 {
+    uint64_t drv;
+    BOOL visible = (NtUserGetWindowLongW( hwnd, GWL_STYLE ) & WS_VISIBLE) != 0;
+
     if (surface && surface != &dummy_surface) wweb_surface_note( hwnd, surface );
+    if (wweb_map( hwnd, &drv )) wineweb_drv_show_window( drv, visible ? 1 : 0 );
 }
 
 /* --- the dxwgpu↔drv present seam (P4.14, docs/spikes/p4-d3d9-attach.md) ----
