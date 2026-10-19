@@ -68,7 +68,29 @@ static NTSTATUS WINAPI User32DrawText( void *args, ULONG size )
 
     size -= FIELD_OFFSET( struct draw_text_params, str );
     result.rect = params->rect;
+#ifdef __wasm__ /* wineweb: user32's DrawTextW is shadowed by win32u's in the
+                 * unified archive (--allow-multiple-definition picks the
+                 * first definition), and win32u's DrawTextW rides THIS
+                 * callback — call the engine directly to keep the native
+                 * chain (win32u DrawTextW -> KeUserModeCallback -> user32
+                 * engine) from recursing. The DT_TABSTOP shift is
+                 * user32's own DrawTextW wrapper, kept verbatim. */
+    {
+        DRAWTEXTPARAMS dtp;
+        UINT flags = params->flags;
+        memset( &dtp, 0, sizeof(dtp) );
+        dtp.cbSize = sizeof(dtp);
+        if (flags & DT_TABSTOP)
+        {
+            dtp.iTabLength = (flags >> 8) & 0xff;
+            flags &= 0xffff00ff;
+        }
+        result.height = DrawTextExW( params->hdc, (LPWSTR)params->str, size / sizeof(WCHAR),
+                                     &result.rect, flags, &dtp );
+    }
+#else
     result.height = DrawTextW( params->hdc, params->str, size / sizeof(WCHAR), &result.rect, params->flags );
+#endif
     return NtCallbackReturn( &result, sizeof(result), STATUS_SUCCESS );
 }
 
@@ -195,6 +217,17 @@ static KERNEL_CALLBACK_PROC kernel_callback_table[NtUserCallCount] =
     ALL_USER32_CALLBACKS
 #undef USER32_CALLBACK_ENTRY
 };
+
+#ifdef __wasm__ /* wineweb: the unified archive skips DllMain (the imm32 load
+                 * has no wasm route — see the p38 harness's attach comment);
+                 * the boot installs the table itself, and the harness's
+                 * KeUserModeCallback wasm seam dispatches through the PEB
+                 * exactly like ntdll's dispatch_user_callback. */
+void user32_install_callback_table(void)
+{
+    NtCurrentTeb()->Peb->KernelCallbackTable = kernel_callback_table;
+}
+#endif
 
 
 /***********************************************************************

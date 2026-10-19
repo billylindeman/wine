@@ -6728,6 +6728,17 @@ static HKEY open_hkcu(void)
  */
 UINT font_init(void)
 {
+#ifdef __wasm__ /* wineweb: the 8x8 backend needs no registry. The boot's
+                 * HKCU/registry paths below can fail honestly (open_hkcu,
+                 * the font-cache mutant), and every early return before the
+                 * backend is set leaves font_funcs NULL — font_CreateDC then
+                 * pushes no font layer and all text silently no-ops through
+                 * the null driver (the P3.8 nonclient tranche's wall). */
+    font_funcs = init_wineweb_font_lib();
+    if (!font_funcs) return 96;
+    font_funcs->load_fonts();
+    return 96;
+#else
     OBJECT_ATTRIBUTES attr = { sizeof(attr) };
     UNICODE_STRING name;
     HANDLE mutex;
@@ -6791,6 +6802,7 @@ UINT font_init(void)
     dump_gdi_font_list();
     dump_gdi_font_subst();
     return dpi;
+#endif /* __wasm__ */
 }
 
 /***********************************************************************

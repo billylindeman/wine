@@ -1208,9 +1208,6 @@ static void draw_caption_bar( HDC hdc, const RECT *rect, DWORD style, BOOL activ
     else
     {
         DWORD color = active ? COLOR_ACTIVECAPTION : COLOR_INACTIVECAPTION;
-#ifdef __wasm__ /* wineweb: WWNC probe */
-        ERR( "WWNC: caption bar fill rect %s color idx %d syscolor %06x\n", wine_dbgstr_rect( rect ), color, get_sys_color( color ));
-#endif
         fill_rect( hdc, rect, get_sys_color_brush( color ));
     }
 }
@@ -1608,7 +1605,6 @@ static void draw_nc_caption( HDC hdc, RECT *rect, HWND hwnd, DWORD  style,
     {
         NONCLIENTMETRICSW nclm;
         HFONT hFont, hOldFont;
-        INT text_ret;
         nclm.cbSize = sizeof(nclm);
         NtUserSystemParametersInfo( SPI_GETNONCLIENTMETRICS, 0, &nclm, 0 );
         if (ex_style & WS_EX_TOOLWINDOW)
@@ -1616,20 +1612,14 @@ static void draw_nc_caption( HDC hdc, RECT *rect, HWND hwnd, DWORD  style,
         else
             hFont = NtGdiHfontCreate( &nclm.lfCaptionFont, sizeof(nclm.lfCaptionFont), 0, 0, NULL );
         hOldFont = NtGdiSelectFont( hdc, hFont );
-#ifdef __wasm__ /* wineweb: WWNC probe */
-        ERR( "WWNC: caption text \"%s\" hfont %p select %p\n", debugstr_w(buffer), (void *)hFont, (void *)hOldFont );
-#endif
         if (active)
             NtGdiGetAndSetDCDword( hdc, NtGdiSetTextColor, get_sys_color( COLOR_CAPTIONTEXT ), NULL );
         else
             NtGdiGetAndSetDCDword( hdc, NtGdiSetTextColor, get_sys_color( COLOR_INACTIVECAPTIONTEXT ), NULL );
         NtGdiGetAndSetDCDword( hdc, NtGdiSetBkMode, TRANSPARENT, NULL );
         r.left += 2;
-        text_ret = DrawTextW( hdc, buffer, -1, &r,
+        DrawTextW( hdc, buffer, -1, &r,
                      DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_LEFT );
-#ifdef __wasm__ /* wineweb: WWNC probe */
-        ERR( "WWNC: DrawTextW ret %d\n", text_ret );
-#endif
         NtGdiDeleteObjectApp( NtGdiSelectFont( hdc, hOldFont ));
     }
 }
@@ -1763,16 +1753,9 @@ static void nc_paint( HWND hwnd, HRGN clip )
 
     if (!hdc)
     {
-#ifdef __wasm__ /* wineweb: WWNC probe */
-        ERR( "WWNC: nc_paint GetDCEx FAILED hwnd %p\n", hwnd );
-#endif
         NtGdiDeleteObjectApp( hrgn );
         return;
     }
-
-#ifdef __wasm__ /* wineweb: WWNC probe */
-    ERR( "WWNC: nc_paint hdc %p active %d\n", (void *)hdc, active );
-#endif
 
     get_window_rect_rel( hwnd, COORDS_WINDOW, &rect, get_thread_dpi() );
     NtGdiGetAppClipBox( hdc, &clip_rect );
@@ -1800,15 +1783,7 @@ static void nc_paint( HWND hwnd, HRGN clip )
         }
 
         if (intersect_rect( &rfuzz, &r, &clip_rect ))
-        {
-#ifdef __wasm__ /* wineweb: WWNC probe */
-            ERR( "WWNC: draw_nc_caption enter\n" );
-#endif
             draw_nc_caption( hdc, &r, hwnd, style, ex_style, active );
-        }
-#ifdef __wasm__ /* wineweb: WWNC probe */
-        else ERR( "WWNC: caption rect %s vs clip %s INTERSECT FAILED\n", wine_dbgstr_rect(&r), wine_dbgstr_rect(&clip_rect) );
-#endif
     }
 
     if (has_menu( hwnd, style ))
@@ -1821,9 +1796,6 @@ static void nc_paint( HWND hwnd, HRGN clip )
         TRACE( "drawing menu with rect %s\n", wine_dbgstr_rect( &r ));
 
         menu = get_menu( hwnd );
-#ifdef __wasm__ /* wineweb: WWNC probe */
-        ERR( "WWNC: menu branch menu %p\n", (void *)menu );
-#endif
         if (!is_menu( menu )) rect.top += get_system_metrics( SM_CYMENU );
         else rect.top += NtUserDrawMenuBarTemp( hwnd, hdc, &r, menu, NULL );
     }

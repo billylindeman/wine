@@ -159,6 +159,11 @@ static BOOL wweb_surface_flush( struct window_surface *surface, const RECT *rect
     uint8_t *dst;
     uint32_t len;
 
+#ifdef __wasm__ /* wineweb: WWFL probe */
+    ERR( "WWFL: flush surf %dx%d dirty %s bounds %s\n", surface_w,
+         surface->rect.bottom - surface->rect.top, wine_dbgstr_rect( dirty ), wine_dbgstr_rect( &surface->bounds ) );
+#endif
+
     /* The drv handle resolves here, not at surface creation: the create walk
      * builds the window surface BEFORE WM_NCCREATE/WM_CREATE/pCreateWindow
      * (window.c's initial apply_window_pos), so the drv window does not exist
@@ -276,7 +281,11 @@ static BOOL wweb_CreateWindow( HWND hwnd )
     WCHAR buf[128];
     int i, len;
 
-    if (!get_window_rects( hwnd, COORDS_CLIENT, &rects, get_thread_dpi() )) return FALSE;
+    /* The screen space: the drv window's x/y are the compositor's placement
+     * (the screen). COORDS_CLIENT expresses the window rect relative to the
+     * window's own client origin — the outer rect came out (-4,-60) and the
+     * whole nonclient area hung off-screen (the P3.8 nonclient tranche). */
+    if (!get_window_rects( hwnd, COORDS_SCREEN, &rects, get_thread_dpi() )) return FALSE;
     rect = rects.window;
     len = NtUserInternalGetWindowText( hwnd, buf, 128 );
     for (i = 0; i < len && i < 127; i++)
