@@ -2969,12 +2969,17 @@ static BOOL lock_display_devices( BOOL force )
 
     pthread_mutex_lock( &display_lock );
 
-    serial = get_monitor_update_serial();
-    if (!force && monitor_update_serial >= serial) return TRUE;
-
 #ifdef __wasm__ /* wineweb: the single canvas-matched display entry (P4.15b) */
+    /* The wasm session's desktop shm has no monitor_serial producer (the
+     * registry family that would bump it is absent), so the serial
+     * fast-path below would starve the cache build forever: the wasm branch
+     * rebuilds the tiny cache on every lock instead. */
+    serial = get_monitor_update_serial();
     return wweb_lock_display_devices( serial );
 #endif
+
+    serial = get_monitor_update_serial();
+    if (!force && monitor_update_serial >= serial) return TRUE;
 
     /* services do not have any adapters, only a virtual monitor */
     if (NtUserGetObjectInformation( NtUserGetProcessWindowStation(), UOI_NAME, name, sizeof(name), NULL )
