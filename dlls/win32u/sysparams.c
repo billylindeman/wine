@@ -2880,6 +2880,77 @@ void reset_monitor_update_serial(void)
     pthread_mutex_unlock( &display_lock );
 }
 
+#ifdef __wasm__ /* wineweb: the display-device family (P4.15b) ---------------- */
+/*
+ * The wasm session has no display-device registry and no display manager:
+ * the honest single entry is the compositor canvas itself, queried through
+ * the wineweb drv adapter (wineweb_driver.c's wineweb_screen_size — the
+ * presentation half's geometry, the same thing winex11.drv reports for a
+ * real display). One entry, not a monitor farm: the compositor is one
+ * surface. Shape matches wine's service-session virtual monitor
+ * (lock_display_devices' service branch) but sized to the real canvas
+ * instead of 1024x768 — docs/spikes/p4-d3d9-attach.md §9.2.
+ */
+static BOOL wweb_lock_display_devices( UINT64 serial )
+{
+    extern void wineweb_screen_size( unsigned int *w, unsigned int *h );
+    static const DEVMODEW mode_template =
+    {
+        .dmSize = sizeof(DEVMODEW),
+        .dmFields = DM_DISPLAYORIENTATION | DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT |
+                    DM_DISPLAYFLAGS | DM_DISPLAYFREQUENCY | DM_POSITION,
+        .dmBitsPerPel = 32,
+        .dmPelsWidth = 320,
+        .dmPelsHeight = 240,
+        .dmDisplayFrequency = 60,
+    };
+    struct source *source;
+    struct monitor *monitor;
+    DEVMODEW mode = mode_template;
+    unsigned int w = mode.dmPelsWidth, h = mode.dmPelsHeight;
+
+    if (wineweb_screen_size( &w, &h ))
+    {
+        pthread_mutex_unlock( &display_lock );
+        return FALSE;
+    }
+    mode.dmPelsWidth = w;
+    mode.dmPelsHeight = h;
+
+    clear_display_devices();
+
+    if (!(source = calloc( 1, sizeof(*source) )))
+    {
+        pthread_mutex_unlock( &display_lock );
+        return FALSE;
+    }
+    source->refcount = 1;
+    source->state_flags = DISPLAY_DEVICE_ATTACHED_TO_DESKTOP | DISPLAY_DEVICE_PRIMARY_DEVICE;
+    source->dpi = 96; /* USER_DEFAULT_SCREEN_DPI: 1:1 with the guest's default */
+    source->monitor_count = 1;
+    source->current = mode;
+    source->physical = mode;
+
+    if (!(monitor = calloc( 1, sizeof(*monitor) )))
+    {
+        source_release( source );
+        pthread_mutex_unlock( &display_lock );
+        return FALSE;
+    }
+    monitor->refcount = 1;
+    monitor->source = source_acquire( source );
+    monitor->handle = VIRTUAL_HMONITOR;
+    monitor->rc_work.right = w;
+    monitor->rc_work.bottom = h;
+    list_add_tail( &monitors, &monitor->entry );
+
+    set_winstation_monitors( TRUE );
+    monitor_update_serial = serial;
+    pthread_mutex_unlock( &display_lock );
+    return TRUE;
+}
+#endif
+
 static BOOL lock_display_devices( BOOL force )
 {
     static const WCHAR wine_service_station_name[] =
@@ -2900,6 +2971,10 @@ static BOOL lock_display_devices( BOOL force )
 
     serial = get_monitor_update_serial();
     if (!force && monitor_update_serial >= serial) return TRUE;
+
+#ifdef __wasm__ /* wineweb: the single canvas-matched display entry (P4.15b) */
+    return wweb_lock_display_devices( serial );
+#endif
 
     /* services do not have any adapters, only a virtual monitor */
     if (NtUserGetObjectInformation( NtUserGetProcessWindowStation(), UOI_NAME, name, sizeof(name), NULL )

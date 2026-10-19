@@ -90,6 +90,35 @@ static struct window_surface *wineweb_d3d9_window_surface( HWND hwnd )
     return NULL;
 }
 
+/* --- the compositor canvas size (P4.15b) -----------------------------------
+ *
+ * The display-device family's single entry is the compositor canvas
+ * (sysparams.c's wweb_lock_display_devices queries this under __wasm__).
+ * The size comes from the host half (wineweb_drv_screen_size, exported by
+ * the harness drvshim next to the other wineweb_drv_* entries) — the
+ * presentation half's geometry, never window semantics. The symbol resolves
+ * at the final-module link (only the p38/p414 harnesses link this archive);
+ * a harness that does not export it fails the link loudly instead of
+ * silently mismatching the compositor. Returns 0 on success; a non-zero
+ * return means the host half did not answer (the display lock then fails —
+ * the honest refusal, never a 0x0 monitor). */
+int wineweb_screen_size( unsigned int *w, unsigned int *h )
+{
+    extern int32_t wineweb_drv_screen_size(uint32_t *w, uint32_t *h);
+    uint32_t hw = 0, hh = 0;
+
+    *w = 0;
+    *h = 0;
+    if (wineweb_drv_screen_size( &hw, &hh ) != 0) return -1;
+    /* The sane-geometry clamp: the petabyte-DIB shape (a garbage rect riding
+     * into a surface allocation) cannot come from the compositor's own size.
+     * 32768 is the same ceiling the DIB surface guard uses. */
+    if (!hw || !hh || hw > 0x8000 || hh > 0x8000) return -1;
+    *w = hw;
+    *h = hh;
+    return 0;
+}
+
 /* --- the window surface ---------------------------------------------------- */
 
 struct wweb_surface
@@ -138,6 +167,9 @@ static BOOL wweb_surface_flush( struct window_surface *surface, const RECT *rect
      * path's flush_window_surfaces, long after the create walk completed)
      * publishes the initial content. */
     if (!wweb_map( s->hwnd, &s->drv )) return FALSE;
+    if (dirty->left < 0 || dirty->top < 0 || surface_w == 0) return FALSE;
+    x_end = min( dirty->right, surface->rect.right );
+    y_end = min( dirty->bottom, surface->rect.bottom );
     /* The surface rect is rounded up to a 128 multiple (get_surface_rect's
      * resize-avoidance) while the drv window is the exact window rect: clip
      * the flush to what the drv surface can hold (wineweb_drv_surface_write
@@ -152,9 +184,6 @@ static BOOL wweb_surface_flush( struct window_surface *surface, const RECT *rect
                 break;
             }
     }
-    if (dirty->left < 0 || dirty->top < 0 || surface_w == 0) return FALSE;
-    x_end = min( dirty->right, surface->rect.right );
-    y_end = min( dirty->bottom, surface->rect.bottom );
     if (x_end <= dirty->left || y_end <= dirty->top) return TRUE; /* nothing visible */
     len = (uint32_t)(x_end - dirty->left) * 4;
     if (!len || !(dst = malloc( len ))) return FALSE;
@@ -192,6 +221,18 @@ static BOOL wweb_CreateWindowSurface( HWND hwnd, BOOL layered, const RECT *rect,
     struct window_surface *surf;
     struct wweb_surface *ws;
     UINT width = rect->right - rect->left, height = rect->bottom - rect->top;
+
+    /* The sane-geometry guard (P4.15b): a garbage rect (the DC-family
+     * failure shape — a 0x3440xxxx-wide rect rode into a petabyte DIB and
+     * exhausted the host pool) is refused here, loudly, instead of being
+     * allocated. 32768 is the same ceiling wineweb_screen_size clamps the
+     * compositor canvas to. */
+    if (!width || !height || width > 0x8000 || height > 0x8000)
+    {
+        static int once;
+        if (!once++) WARN( "wineweb.drv: refusing absurd surface rect %dx%d\n", width, height );
+        return FALSE;
+    }
 
     memset( &bmi, 0, sizeof(bmi) );
     bmi.info.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
