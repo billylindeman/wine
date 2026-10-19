@@ -2754,7 +2754,16 @@ DWORD WINAPI NtUserDrawMenuBarTemp( HWND hwnd, HDC hdc, RECT *rect, HMENU handle
     if (!font) font = get_menu_font(FALSE);
 
     menu = unsafe_menu_ptr( handle );
-    if (!menu || !rect) return get_system_metrics( SM_CYMENU );
+    if (!menu || !rect)
+    {
+#ifdef __wasm__ /* wineweb: WWNC probe */
+        ERR( "WWNC: DrawMenuBarTemp menu %p unsafe_ptr null (handle %p)\n", (void *)handle, (void *)handle );
+#endif
+        return get_system_metrics( SM_CYMENU );
+    }
+#ifdef __wasm__ /* wineweb: WWNC probe */
+    ERR( "WWNC: DrawMenuBarTemp enter hwnd %p items %u height %u\n", hwnd, menu->nItems, menu->Height );
+#endif
 
     TRACE( "(%p, %p, %p, %p, %p)\n", hwnd, hdc, rect, handle, font );
 

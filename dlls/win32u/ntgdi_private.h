@@ -347,6 +347,7 @@ extern int add_gdi_face( const WCHAR *family_name, const WCHAR *second_name,
                          const struct bitmap_font_size *size );
 extern UINT font_init(void);
 extern const struct font_backend_funcs *init_freetype_lib(void);
+extern const struct font_backend_funcs *init_wineweb_font_lib(void); /* wineweb: the wasm 8x8 backend */
 
 /* opentype.c */
 

@@ -6747,7 +6747,12 @@ UINT font_init(void)
     if (!dpi) return 96;
     update_codepage( dpi );
 
-    if (!(font_funcs = init_freetype_lib()))
+#ifdef __wasm__ /* wineweb: no freetype on wasm — the 8x8 bitmap backend */
+    font_funcs = init_wineweb_font_lib();
+#else
+    font_funcs = init_freetype_lib();
+#endif
+    if (!font_funcs)
         return dpi;
 
     load_system_bitmap_fonts();

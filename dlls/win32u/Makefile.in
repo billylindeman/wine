@@ -12,6 +12,7 @@ EXTRADLLFLAGS = -nodefaultlibs
 SOURCES = \
 	bitblt.c \
 	wineweb_driver.c \
+	wineweb_font.c \
 	bitmap.c \
 	brush.c \
 	class.c \
