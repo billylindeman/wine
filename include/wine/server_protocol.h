@@ -6245,6 +6245,27 @@ struct alpc_create_port_reply
     char __pad_12[4];
 };
 
+/* wineweb: the shared-session fetch (P4.14, docs/spikes/p4-d3d9-attach.md).
+ * The real server mmaps a session section the clients share; the wasm
+ * miniserver owns the image instead — the client fetches the block covering
+ * [offset, offset+size) through this call and commits it privately. The
+ * server zero-pads past the image end, so a not-yet-registered object reads
+ * as id 0 (the caller's "no SHM" case). */
+struct get_shared_session_block_request
+{
+    struct request_header __header;
+    char __pad_12[4];
+    mem_size_t          offset;
+    data_size_t         size;
+    char __pad_28[4];
+};
+struct get_shared_session_block_reply
+{
+    struct reply_header __header;
+    mem_size_t          image_size;
+
+};
+
 
 enum request
 {
@@ -6556,6 +6577,7 @@ enum request
     REQ_d3dkmt_mutex_acquire,
     REQ_d3dkmt_mutex_release,
     REQ_alpc_create_port,
+    REQ_get_shared_session_block,
     REQ_NB_REQUESTS
 };
 
@@ -6871,6 +6893,7 @@ union generic_request
     struct d3dkmt_mutex_acquire_request d3dkmt_mutex_acquire_request;
     struct d3dkmt_mutex_release_request d3dkmt_mutex_release_request;
     struct alpc_create_port_request alpc_create_port_request;
+    struct get_shared_session_block_request get_shared_session_block_request;
 };
 union generic_reply
 {
@@ -7184,8 +7207,9 @@ union generic_reply
     struct d3dkmt_mutex_acquire_reply d3dkmt_mutex_acquire_reply;
     struct d3dkmt_mutex_release_reply d3dkmt_mutex_release_reply;
     struct alpc_create_port_reply alpc_create_port_reply;
+    struct get_shared_session_block_reply get_shared_session_block_reply;
 };
 
-#define SERVER_PROTOCOL_VERSION 963
+#define SERVER_PROTOCOL_VERSION 964
 
 #endif /* __WINE_WINE_SERVER_PROTOCOL_H */
