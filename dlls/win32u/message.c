@@ -482,9 +482,18 @@ static LRESULT dispatch_win_proc_params( struct win_proc_params *params, size_t 
     else
     {
         UINT_PTR proc = (UINT_PTR)params->procW;
-        ERR( "W8: guest dispatch proc %x hwnd %x msg %u wp %x lp %x\n",
-             (unsigned)proc, (unsigned)(UINT_PTR)params->hwnd, params->msg,
-             (unsigned)params->wparam, (unsigned)params->lparam );
+        /* wineweb: trace the key/paint-class dispatches only. The
+         * unconditional per-dispatch trace (the T3c-era diag) floods the
+         * driver's bounded diag ring on a healthy pump — the pump rounds
+         * accumulate >200 drops inside one parked dispatch step and the
+         * typed records never deliver (the T3 delivery bisect: the
+         * unconditional trace → 0 get_message fetches + the pool-corridor
+         * death; the quieted trace → 54 fetches + the T3 gate green). The
+         * key/paint classes are the buffer leg's evidence channel. */
+        if ((params->msg >= 0x100 && params->msg <= 0x102) || params->msg == 0x0f)
+            ERR( "W8: key dispatch hwnd %x msg %u wp %x lp %x proc %x\n",
+                 (unsigned)(UINT_PTR)params->hwnd, params->msg,
+                 (unsigned)params->wparam, (unsigned)params->lparam, (unsigned)proc );
         /* The proc is either a guest VA (the image lives at/below the
          * corridor end) or a builtin's wasm function pointer — those are
          * small table indices in this toolchain (the W8 run-13 evidence: a
@@ -494,7 +503,6 @@ static LRESULT dispatch_win_proc_params( struct win_proc_params *params, size_t 
                                          params->msg, params->wparam, params->lparam );
         else
             result = ((WNDPROC)proc)( params->hwnd, params->msg, params->wparam, params->lparam );
-        ERR( "W8: guest dispatch result %x\n", (unsigned)result );
     }
     thread_info->msg_call_depth--;
     return result;
