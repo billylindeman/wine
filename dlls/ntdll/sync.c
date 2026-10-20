@@ -337,7 +337,21 @@ NTSTATUS WINAPI RtlpWaitForCriticalSection( RTL_CRITICAL_SECTION *crit )
     unsigned int timeout = 5;
 
 #ifdef __wasm__
+    /* wineweb: the wasm route is single-threaded — no other guest thread can
+     * hold this section, so a wait here is always a self-deadlock: the
+     * caller re-entered its own section (the recursive case), or the lock is
+     * free and RtlEnterCriticalSection's Increment raced the identity check
+     * (the TID forms never matched — the same class as the TEB ClientId
+     * walls). Both resolve as the win32 recursive enter: succeed with the
+     * RecursionCount bumped. The genuine cross-thread contention is the
+     * worker-ization's to handle (P6). The probe stays for the diag. */
     wineweb_cs_probe( crit );
+    if (crit->OwningThread == ULongToHandle(GetCurrentThreadId()))
+    {
+        crit->RecursionCount++;
+        return STATUS_SUCCESS;
+    }
+    if ((LONG)crit->LockCount <= 0) return STATUS_SUCCESS;
 #endif
 
     /* Don't allow blocking on a critical section during process termination */
