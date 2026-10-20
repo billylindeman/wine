@@ -3325,7 +3325,7 @@ static HANDLE get_server_queue_handle(void)
     return ret;
 }
 
-static BOOL is_queue_signaled(void)
+static BOOL is_queue_signaled( UINT wake_mask, UINT changed_mask )
 {
     struct object_lock lock = OBJECT_LOCK_INIT;
     const queue_shm_t *queue_shm;
@@ -3335,9 +3335,32 @@ static BOOL is_queue_signaled(void)
     while ((status = get_shared_queue( &lock, &queue_shm )) == STATUS_PENDING)
         signaled = (queue_shm->wake_bits & queue_shm->wake_mask) ||
                    (queue_shm->changed_bits & queue_shm->changed_mask);
-    if (status) return FALSE;
+    if (!status) return signaled;
 
-    return signaled;
+#ifdef __wasm__ /* wineweb: the queue shm never maps on this route
+                 * (winstation.c's cache-absence note), so a nonzero status is
+                 * the normal state here, not a lost queue. A hard FALSE made
+                 * wait_message's do-while spin select→set_queue_mask forever —
+                 * posted messages sat in the server queue while get_message
+                 * was never reached (the P3.8 T3 delivery wall). The honest
+                 * path is the get_queue_status op the other queue-bits
+                 * callers already fall back to (NtUserGetQueueStatus's
+                 * shape); the current wait's masks are what set_queue_mask
+                 * just registered server-side. */
+    {
+        unsigned int wake_bits = 0, changed_bits = 0;
+        SERVER_START_REQ( get_queue_status )
+        {
+            req->clear_bits = 0;
+            wine_server_call( req );
+            wake_bits = reply->wake_bits;
+            changed_bits = reply->changed_bits;
+        }
+        SERVER_END_REQ;
+        return (wake_bits & wake_mask) || (changed_bits & changed_mask);
+    }
+#endif
+    return FALSE;
 }
 
 static BOOL check_queue_masks( UINT wake_mask, UINT changed_mask )
@@ -3397,7 +3420,7 @@ static BOOL process_driver_events( UINT events_mask, UINT wake_mask, UINT change
         peek_message( &msg, &filter );
     }
 
-    return is_queue_signaled();
+    return is_queue_signaled( wake_mask, changed_mask );
 }
 
 void check_for_events( UINT flags )
