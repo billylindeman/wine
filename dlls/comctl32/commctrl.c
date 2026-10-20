@@ -1269,6 +1269,13 @@ static LRESULT WINAPI COMCTL32_SubclassProc (HWND hWnd, UINT uMsg, WPARAM wParam
  *     Failure: zero
  */
 
+#ifdef __wasm__ /* wineweb: the in-module 6-arg guest-call primitive (the patch-0023 idiom) */
+extern unsigned int wineweb_guest_call6( unsigned int proc, unsigned int hwnd, unsigned int msg,
+                                         unsigned int wparam, unsigned int lparam,
+                                         unsigned int id, unsigned int ref );
+#endif
+
+
 LRESULT WINAPI DefSubclassProc (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
    LPSUBCLASS_INFO stack;
@@ -1291,8 +1298,21 @@ LRESULT WINAPI DefSubclassProc (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
       const SUBCLASSPROCS *proc = stack->stackpos;
       stack->stackpos = stack->stackpos->next; 
       /* call the Subclass procedure from the stack */
+#ifdef __wasm__ /* wineweb: a guest-VA callback is a call_indirect OOB trap — route it through the in-module primitive (the patch-0023 idiom, message.c's dispatch range: guest VAs are 0x400000..0x20000000) */
+      {
+         UINT_PTR subproc = (UINT_PTR)proc->subproc;
+         if (subproc >= 0x400000u && subproc < 0x20000000u)
+            ret = wineweb_guest_call6( subproc, (unsigned)(UINT_PTR)hWnd, uMsg,
+                                       (unsigned)wParam, (unsigned)lParam,
+                                       (unsigned)proc->id, (unsigned)proc->ref );
+         else
+            ret = proc->subproc (hWnd, uMsg, wParam, lParam,
+                  proc->id, proc->ref);
+      }
+#else
       ret = proc->subproc (hWnd, uMsg, wParam, lParam,
             proc->id, proc->ref);
+#endif
    }
 
    return ret;
