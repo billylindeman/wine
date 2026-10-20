@@ -520,7 +520,28 @@ static BOOL class_name_matches( CLASS *class, UNICODE_STRING *name )
     /* class name is safe to read without shared object locking as it is constant */
     const WCHAR *class_name = (WCHAR *)class->shared->shm.class.name;
     UINT len = class->shared->shm.class.name_len;
-    return name->Length == len && !wcsnicmp( class_name, name->Buffer, len / sizeof(WCHAR) );
+    if (name->Length != len) return FALSE;
+#ifdef __wasm__
+    /* The NLS case tables never load on the wasm route (no l_intl.nls — the
+     * P6 wall), so wcsnicmp's ntdll_towupper reads the NULL table in the low
+     * fence and compares by identity: "Edit" never matched "edit" and every
+     * builtin-class lookup failed (the edit control was never created — the
+     * notepad T3 typing leg's wall). The boot's class names are ASCII; the
+     * full Unicode tables are the NLS tranche's to restore. */
+    {
+        UINT i, n = len / sizeof(WCHAR);
+        for (i = 0; i < n; i++)
+        {
+            WCHAR a = class_name[i], b = name->Buffer[i];
+            if (a >= 'A' && a <= 'Z') a += 'a' - 'A';
+            if (b >= 'A' && b <= 'Z') b += 'a' - 'A';
+            if (a != b) return FALSE;
+        }
+        return TRUE;
+    }
+#else
+    return !wcsnicmp( class_name, name->Buffer, len / sizeof(WCHAR) );
+#endif
 }
 
 static BOOL is_local_class( CLASS *class )
