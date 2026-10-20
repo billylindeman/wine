@@ -654,6 +654,17 @@ BOOL WINAPI GetWindowRect( HWND hwnd, RECT *rect )
 {
     UINT dpi = NTUSER_DPI_CONTEXT_GET_DPI( (UINT_PTR)GetThreadDpiAwarenessContext() );
     BOOL ret = NtUserGetWindowRect( hwnd, rect, dpi );
+#ifdef __wasm__ /* wineweb: a failed GetWindowRect zeroes the rect instead of
+                 * leaving the caller's memory untouched. Upstream leaves it
+                 * (the rect is unspecified on FALSE), but notepad reads it
+                 * unconditionally on its status-bar path — with the status
+                 * bar's class unregistered (comctl32's lazy registration is
+                 * out of the p38 link budget, see the T3 record) hStatusBar
+                 * is NULL and the stack garbage poisoned the edit's layout
+                 * height to 0, so no glyph could ever paint (the T3 render
+                 * leg). Zeros are the honest no-status-bar layout. */
+    if (!ret) rect->left = rect->right = rect->top = rect->bottom = 0;
+#endif
     if (ret) TRACE( "hwnd %p %s\n", hwnd, wine_dbgstr_rect(rect) );
     return ret;
 }

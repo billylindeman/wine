@@ -379,6 +379,16 @@ static SCRIPT_STRING_ANALYSIS EDIT_UpdateUniscribeData_linedef(EDITSTATE *es, HD
 	if (!line_def)
 		return NULL;
 
+#ifdef __wasm__ /* wineweb: the uniscribe render path is dead on this route —
+                 * ScriptTextOut bails at init_script_cache (the 8x8 engine
+                 * has no sfnt data for the script cache) before its
+                 * ExtTextOutW, so an analysed line renders nothing. Wine's
+                 * own fallback (ssa == NULL → EDIT_PaintText → ExtTextOut)
+                 * draws the same string through the same engine; yield to
+                 * it (the T3 render leg). */
+	return NULL;
+#endif
+
 	if (line_def->net_length && !line_def->ssa)
 	{
 		int index = line_def->index;
@@ -429,6 +439,10 @@ static SCRIPT_STRING_ANALYSIS EDIT_UpdateUniscribeData(EDITSTATE *es, HDC dc, IN
 
 	if (!(es->style & ES_MULTILINE))
 	{
+#ifdef __wasm__ /* wineweb: the same uniscribe divergence as the multiline
+                 * variant above — the ExtTextOut fallback draws. */
+		return NULL;
+#endif
 		if (!es->ssa)
 		{
 			INT length = get_text_length(es);
@@ -2170,6 +2184,14 @@ static INT EDIT_PaintText(EDITSTATE *es, HDC dc, INT x, INT y, INT line, INT col
 
 	if (!count)
 		return 0;
+	/* TEMP T3 diag: the edit's text paint (removed with the tranche). */
+	{
+		__attribute__((import_module("wineweb_host"), import_name("log")))
+		extern void wineweb_host_log(int level, const char *ptr, unsigned len);
+		char dbg[64];
+		int n = __builtin_snprintf(dbg, sizeof(dbg), "W8: EDIT_PaintText count=%d\n", count);
+		wineweb_host_log(0, dbg, n);
+	}
 	BkMode = GetBkMode(dc);
 	BkColor = GetBkColor(dc);
 	TextColor = GetTextColor(dc);
@@ -2223,6 +2245,14 @@ static void EDIT_PaintLine(EDITSTATE *es, HDC dc, INT line, BOOL rev)
 	TRACE("line=%d\n", line);
 
 	ssa = EDIT_UpdateUniscribeData(es, dc, line);
+	/* TEMP T3 diag: which draw path the line takes (removed with the tranche). */
+	{
+		__attribute__((import_module("wineweb_host"), import_name("log")))
+		extern void wineweb_host_log(int level, const char *ptr, unsigned len);
+		char dbg[64];
+		int n = __builtin_snprintf(dbg, sizeof(dbg), "W8: EDIT_PaintLine line=%d ssa=%p\n", line, (void *)ssa);
+		wineweb_host_log(0, dbg, n);
+	}
 	pos = EDIT_EM_PosFromChar(es, EDIT_EM_LineIndex(es, line), FALSE);
 	x = (short)LOWORD(pos);
 	y = (short)HIWORD(pos);
@@ -2574,6 +2604,10 @@ static void EDIT_EM_ReplaceSel(EDITSTATE *es, BOOL can_undo, const WCHAR *lpsz_r
 	HRGN hrgn = 0;
 	LPWSTR buf = NULL;
 	UINT bufl;
+
+	/* TEMP T3 diag: the insert path (removed with the tranche). */
+	ERR( "W8: EDIT_EM_ReplaceSel len=%u first=%x tl=%u\n", strl,
+	     strl ? (unsigned)lpsz_replace[0] : 0, tl );
 
 	TRACE("%s, can_undo %d, send_update %d\n",
 	    debugstr_wn(lpsz_replace, strl), can_undo, send_update);
@@ -3193,6 +3227,10 @@ static LRESULT EDIT_WM_Char(EDITSTATE *es, WCHAR c)
 {
         BOOL control;
 
+	/* TEMP T3 diag: the edit saw the char (removed with the tranche). */
+	ERR( "W8: EDIT_WM_Char c=%x capture=%x style=%x\n", (unsigned)c,
+	     (unsigned)es->bCaptureState, (unsigned)es->style );
+
 	if (es->bCaptureState)
 		return 1;
 
@@ -3380,6 +3418,10 @@ static void EDIT_WM_ContextMenu(EDITSTATE *es, INT x, INT y)
  */
 static INT EDIT_WM_GetText(const EDITSTATE *es, INT count, LPWSTR dst, BOOL unicode)
 {
+    /* TEMP T3 diag: the probe's read-back (removed with the tranche). */
+    ERR( "W8: EDIT_WM_GetText count=%u len=%u first=%x\n", (unsigned)count,
+         (unsigned)get_text_length(es),
+         get_text_length(es) ? (unsigned)es->text[0] : 0 );
     if(!count) return 0;
 
     if(unicode)
@@ -3728,12 +3770,17 @@ static void EDIT_WM_Paint(EDITSTATE *es, HDC hdc)
 	BOOL rev = es->bEnableState &&
 				((es->flags & EF_FOCUSED) ||
 					(es->style & ES_NOHIDESEL));
+	INT gcb_rv; /* TEMP T3 diag */
         dc = hdc ? hdc : NtUserBeginPaint( es->hwndSelf, &ps );
 
 	/* The dc we use for calculating may not be the one we paint into.
 	   This is the safest action. */
 	EDIT_InvalidateUniscribeData(es);
 	GetClientRect(es->hwndSelf, &rcClient);
+
+	/* TEMP T3 diag: the paint's entry state (removed with the tranche). */
+	ERR( "W8: EDIT_WM_Paint dc=%x rcClient %s text len %u\n", (unsigned)(UINT_PTR)dc,
+	     wine_dbgstr_rect(&rcClient), (unsigned)get_text_length(es) );
 
 	/* get the background brush */
 	brush = EDIT_NotifyCtlColor(es, dc);
@@ -3779,9 +3826,47 @@ static void EDIT_WM_Paint(EDITSTATE *es, HDC hdc)
 
 	if (!es->bEnableState)
 		SetTextColor(dc, GetSysColor(COLOR_GRAYTEXT));
-	GetClipBox(dc, &rcRgn);
+	gcb_rv = GetClipBox(dc, &rcRgn);
+	/* TEMP T3 diag: GetClipBox's own verdict (removed with the tranche). */
+	{
+		__attribute__((import_module("wineweb_host"), import_name("log")))
+		extern void wineweb_host_log(int level, const char *ptr, unsigned len);
+		char dbg[96];
+		int n = __builtin_snprintf(dbg, sizeof(dbg),
+			"W8: EDIT GetClipBox rv=%d rcRgn (%d,%d)-(%d,%d) rcPaint (%d,%d)-(%d,%d)\n",
+			gcb_rv, rcRgn.left, rcRgn.top, rcRgn.right, rcRgn.bottom,
+			ps.rcPaint.left, ps.rcPaint.top, ps.rcPaint.right, ps.rcPaint.bottom);
+		wineweb_host_log(0, dbg, n);
+	}
+	/* TEMP T3 diag: the paint loop's inputs (removed with the tranche). */
+	{
+		__attribute__((import_module("wineweb_host"), import_name("log")))
+		extern void wineweb_host_log(int level, const char *ptr, unsigned len);
+		char dbg[96];
+		int vlc = (es->style & ES_MULTILINE) ? get_vertical_line_count(es) : 1;
+		int n = __builtin_snprintf(dbg, sizeof(dbg),
+			"W8: EDIT paint loop vlc=%d line_count=%d y_off=%d line_h=%d\n",
+			vlc, es->line_count, es->y_offset, es->line_height);
+		wineweb_host_log(0, dbg, n);
+	}
 	if (es->style & ES_MULTILINE) {
 		INT vlc = get_vertical_line_count(es);
+		/* TEMP T3 diag: the clip vs the line rects (removed with the tranche). */
+		{
+			__attribute__((import_module("wineweb_host"), import_name("log")))
+			extern void wineweb_host_log(int level, const char *ptr, unsigned len);
+			RECT rc0, rcL;
+			char dbg[128];
+			GetClipBox( dc, &rc0 );
+			EDIT_GetLineRect( es, es->y_offset, 0, -1, &rcL );
+			int n = __builtin_snprintf(dbg, sizeof(dbg),
+				"W8: EDIT clip (%d,%d)-(%d,%d) line0 (%d,%d)-(%d,%d) fmt (%d,%d)-(%d,%d)\n",
+				rc0.left, rc0.top, rc0.right, rc0.bottom,
+				rcL.left, rcL.top, rcL.right, rcL.bottom,
+				es->format_rect.left, es->format_rect.top,
+				es->format_rect.right, es->format_rect.bottom);
+			wineweb_host_log(0, dbg, n);
+		}
 		for (i = es->y_offset ; i <= min(es->y_offset + vlc, es->y_offset + es->line_count - 1) ; i++) {
 			EDIT_UpdateUniscribeData(es, dc, i);
 			EDIT_GetLineRect(es, i, 0, -1, &rcLine);
@@ -5037,6 +5122,8 @@ LRESULT EditWndProc_common( HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, B
 
 	case WM_PRINTCLIENT:
 	case WM_PAINT:
+	        /* TEMP T3 diag: the edit's paint (removed with the tranche). */
+	        ERR( "W8: EDIT_WM_Paint hdc=%x\n", (unsigned)(UINT_PTR)wParam );
 	        EDIT_WM_Paint(es, (HDC)wParam);
 		break;
 

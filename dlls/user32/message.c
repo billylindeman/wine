@@ -583,6 +583,10 @@ LRESULT WINAPI SendMessageW( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
 
     params.hwnd = 0;
     retval = NtUserMessageCall( hwnd, msg, wparam, lparam, &params, NtUserSendMessage, FALSE );
+    /* TEMP T3 diag: the probe's send (removed with the tranche). */
+    if (msg == WM_GETTEXT)
+        ERR( "W8: SendMessageW GETTEXT hwnd %x -> params.hwnd %x rv %x\n",
+             (unsigned)(UINT_PTR)hwnd, (unsigned)(UINT_PTR)params.hwnd, (unsigned)retval );
     if (params.hwnd) retval = dispatch_send_message( &params, wparam, lparam );
     return retval;
 }
@@ -797,8 +801,17 @@ static LRESULT dispatch_message( const MSG *msg, BOOL ansi )
     struct win_proc_params params;
     LRESULT retval = 0;
 
+    /* TEMP T3 diag: the key-class dispatch entries only. */
+    if (msg->message >= 0x100 && msg->message <= 0x102)
+        ERR( "W8: u32 dispatch_message msg %x hwnd %p\n", msg->message, (void *)(UINT_PTR)msg->hwnd );
+
     if (!NtUserMessageCall( msg->hwnd, msg->message, msg->wParam, msg->lParam,
-                            &params, NtUserGetDispatchParams, ansi )) return 0;
+                            &params, NtUserGetDispatchParams, ansi ))
+    {
+        if (msg->message >= 0x100 && msg->message <= 0x102)
+            ERR( "W8: u32 GetDispatchParams FAILED msg %x\n", msg->message );
+        return 0;
+    }
 
     SPY_EnterMessage( SPY_DISPATCHMESSAGE, msg->hwnd, msg->message, msg->wParam, msg->lParam );
     retval = dispatch_win_proc_params( &params );

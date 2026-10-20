@@ -1521,6 +1521,18 @@ static HRGN get_update_region( HWND hwnd, UINT *flags, HWND *child )
             if (!(status = wine_server_call( req )))
             {
                 size_t reply_size = wine_server_reply_size( reply );
+                /* TEMP T3 diag: the update-region reply (removed with the tranche). */
+                {
+                    __attribute__((import_module("wineweb_host"), import_name("log")))
+                    extern void wineweb_host_log(int level, const char *ptr, unsigned len);
+                    char dbg[80];
+                    const RECT *r0 = (const RECT *)(data->Buffer);
+                    int n = __builtin_snprintf(dbg, sizeof(dbg),
+                        "W8: getupdrgn reply_size %u nCount %u r0 (%d,%d)-(%d,%d)\n",
+                        (unsigned)reply_size, (unsigned)(reply_size / sizeof(RECT)),
+                        r0->left, r0->top, r0->right, r0->bottom);
+                    wineweb_host_log(0, dbg, n);
+                }
                 data->rdh.dwSize   = sizeof(data->rdh);
                 data->rdh.iType    = RDH_RECTANGLES;
                 data->rdh.nCount   = reply_size / sizeof(RECT);
