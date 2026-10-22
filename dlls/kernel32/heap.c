@@ -109,10 +109,23 @@ C_ASSERT(sizeof(struct mem_entry) == 2 * sizeof(void *));
 
 struct kernelbase_global_data *kernelbase_global_data;
 
+/* The wasm route never runs kernel32's DllMain(DLL_PROCESS_ATTACH) (the
+ * statically linked builtins have no DLL init dispatch), so the pointer the
+ * PE loader would bind to kernelbase's exported data stays NULL: every
+ * unsafe_mem_from_HLOCAL range check then fails, LocalSize returns 0, and
+ * the edit's buffer_size became -1 — the EDITSTATE's undo buffer grew
+ * unbounded past its allocation into the heap-adjacent SUBCLASSPROCS node
+ * (ADR-0008 N6e). Resolve lazily: the same object kernelbase owns. */
+static struct kernelbase_global_data *kb_global_data(void)
+{
+    if (!kernelbase_global_data) kernelbase_global_data = KernelBaseGetGlobalData();
+    return kernelbase_global_data;
+}
+
 static inline struct mem_entry *unsafe_mem_from_HLOCAL( HLOCAL handle )
 {
     struct mem_entry *mem = CONTAINING_RECORD( *(volatile HANDLE *)&handle, struct mem_entry, ptr );
-    struct kernelbase_global_data *data = kernelbase_global_data;
+    struct kernelbase_global_data *data = kb_global_data();
     if (((UINT_PTR)handle & ((sizeof(void *) << 1) - 1)) != sizeof(void *)) return NULL;
     if (mem < data->mem_entries || mem >= data->mem_entries_end) return NULL;
     if (!(mem->flags & MEM_FLAG_USED)) return NULL;
