@@ -21,9 +21,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#if 0
 #pragma makedep unix
-#endif
 
 #include "config.h"
 
@@ -58,6 +56,33 @@
 #include FT_WINFONTS_H
 #include FT_LCD_FILTER_H
 #endif /* HAVE_FT2BUILD_H */
+
+#ifdef __wasm__ /* wineweb (P3.11b): the scalable font tier. The configure
+                 * runs --without-freetype (no pkg-config/soname probe for a
+                 * wasm32 target), so the HAVE_FT2BUILD_H/SONAME_LIBFREETYPE
+                 * gates never define — the wasm freetype is the static lib
+                 * build/freetype/lib/libfreetype.a instead: build-wine-wasm.sh
+                 * adds its include path via the win32u UNIX_CFLAGS and the
+                 * runtime's build.rs links the archive. No dlopen, no dlsym —
+                 * the p-func pointers bind to the FT_ symbols directly in
+                 * init_freetype; font files are read through the server file
+                 * family (op 45 open → op 136 read, the seam's VFS mount) and
+                 * faces are created in memory (no mmap on wasi). */
+#include <ft2build.h>
+#include FT_FREETYPE_H
+#include FT_GLYPH_H
+#include FT_TYPES_H
+#include FT_TRUETYPE_TABLES_H
+#include FT_SFNT_NAMES_H
+#include FT_TRUETYPE_IDS_H
+#include FT_OUTLINE_H
+#include FT_TRIGONOMETRY_H
+#include FT_MODULE_H
+#include FT_WINFONTS_H
+#include FT_LCD_FILTER_H
+#define SONAME_LIBFREETYPE "static" /* the body gate: statically linked */
+#include "wine/server.h"             /* the file-family route (see above) */
+#endif /* __wasm__ */
 
 #include "ntstatus.h"
 #include "windef.h"
@@ -1072,10 +1097,136 @@ static INT AddFontToList(const WCHAR *dos_name, const char *unix_name, void *fon
 }
 
 /*************************************************************
+ * wasm_read_font_file (wineweb P3.11b)
+ *
+ * The wasm font file route: the server file family. The unix open()/mmap()
+ * pair has no wasi data path (the preopen seam answers existence only,
+ * path_open stays ENOSYS), so the file rides the same served ops the
+ * guest's own NtCreateFile/NtReadFile use: open_file_object (op 45 — the
+ * wasm ntdll routes every DOS-path open here, file.c:4682) hands back a
+ * handle whose storage is the VFS seam mount; read (op 136) returns the
+ * bytes chunked at the transport payload cap. The name is the registry's
+ * DOS/NT path verbatim — the seam's name rule maps it onto the mount
+ * (crates/wineweb-vfs nt_path_to_vfs), so no client-side unix resolution
+ * runs and the preopen oracle is never asked. The total size rides
+ * get_file_info first (the read chunks cap at the transport payload);
+ * every failure frees and returns a status.
+ */
+static unsigned int wasm_read_font_file( const WCHAR *dos_name, void **out_data, UINT *out_size )
+{
+    static const UINT MAX_FONT_DATA = 16 * 1024 * 1024;
+    UNICODE_STRING nt_name;
+    OBJECT_ATTRIBUTES attr = { sizeof(attr) };
+    HANDLE handle = 0;
+    unsigned int status, len = 0, cap = 1 << 16;
+    UINT64 size = 0;
+    BYTE *buffer = NULL;
+
+    nt_name.Buffer = (WCHAR *)dos_name;
+    nt_name.Length = nt_name.MaximumLength = lstrlenW( dos_name ) * sizeof(WCHAR);
+    attr.RootDirectory = 0;
+    attr.Attributes = OBJ_CASE_INSENSITIVE;
+    attr.ObjectName = &nt_name;
+
+    SERVER_START_REQ( open_file_object )
+    {
+        req->access     = GENERIC_READ;
+        req->attributes = attr.Attributes;
+        req->rootdir    = wine_server_obj_handle( attr.RootDirectory );
+        req->sharing    = FILE_SHARE_READ | FILE_SHARE_WRITE;
+        req->options    = FILE_SYNCHRONOUS_IO_NONALERT;
+        req->async_user = 0;
+        wine_server_add_data( req, attr.ObjectName->Buffer, attr.ObjectName->Length );
+        status = wine_server_call( req );
+        handle = wine_server_ptr_handle( reply->handle );
+    }
+    SERVER_END_REQ;
+    if (status) return status;
+
+    /* The size rides get_file_info (op 51, FileStandardInformation — the
+     * served class, server.rs handle_get_file_info): the read chunks cap at
+     * the transport payload, so the loop needs the total up front. */
+    SERVER_START_REQ( get_file_info )
+    {
+        static const unsigned int FILE_STANDARD_INFORMATION = 5;
+        BYTE info[24];
+
+        req->handle = wine_server_obj_handle( handle );
+        req->info_class = FILE_STANDARD_INFORMATION;
+        wine_server_set_reply( req, info, sizeof(info) );
+        status = wine_server_call( req );
+        if (!status) size = *(UINT64 *)info;
+    }
+    SERVER_END_REQ;
+    if (status || !size || size > MAX_FONT_DATA)
+    {
+        NtClose( handle );
+        return status ? status : STATUS_END_OF_FILE;
+    }
+
+    for (;;)
+    {
+        BYTE *next;
+        UINT got;
+
+        if (!(next = realloc( buffer, cap )))
+        {
+            status = STATUS_NO_MEMORY;
+            break;
+        }
+        buffer = next;
+        SERVER_START_REQ( read )
+        {
+            memset( &req->async, 0, sizeof(req->async) );
+            req->pos = 0; /* the server-side cursor advances (server.rs handle_read) */
+            wine_server_set_reply( req, buffer + len, min( cap - len, size - len ));
+            status = wine_server_call( req );
+            got = wine_server_reply_size( reply );
+        }
+        SERVER_END_REQ;
+        if (status) break;
+        if (!got) { status = STATUS_END_OF_FILE; break; } /* a short transport */
+        len += got;
+        if (len >= size) break;                          /* the whole file */
+    }
+
+    /* NtClose is a PE-side syscall stub (unwired on the unified build) —
+     * the close rides the server op like every other file-family call. */
+    SERVER_START_REQ( close_handle )
+    {
+        req->handle = wine_server_obj_handle( handle );
+        status = wine_server_call( req );
+    }
+    SERVER_END_REQ;
+    if (status)
+    {
+        free( buffer );
+        return status;
+    }
+    *out_data = buffer;
+    *out_size = len;
+    return STATUS_SUCCESS;
+}
+
+/*************************************************************
  * freetype_add_font
  */
 static INT freetype_add_font( const WCHAR *file, UINT flags )
 {
+#ifdef __wasm__ /* wineweb (P3.11b): read through the server file family and
+                 * create the faces in memory (the mem route — FT_New_
+                 * Memory_Face); the dos name rides for the enum/info paths. */
+    void *data = NULL;
+    UINT size = 0;
+    unsigned int status = wasm_read_font_file( file, &data, &size );
+
+    if (status)
+    {
+        WARN( "wineweb: failed to read font %s (%08x)\n", debugstr_w(file), status );
+        return 0;
+    }
+    return AddFontToList( file, NULL, data, size, flags );
+#else
     int ret = 0;
     char *unixname = NULL;
 
@@ -1086,6 +1237,7 @@ static INT freetype_add_font( const WCHAR *file, UINT flags )
         free( unixname );
     }
     return ret;
+#endif
 }
 
 /*************************************************************
@@ -1454,6 +1606,68 @@ static void load_mac_fonts(void)
 
 static BOOL init_freetype(void)
 {
+#ifdef __wasm__ /* wineweb (P3.11b): the static freetype rides the runtime's
+                 * link — bind the p-func pointers to the FT_ symbols
+                 * directly; a missing symbol is a build-config bug and fails
+                 * loud here (the same contract dlsym's NULL check had). */
+#define LOAD_FUNCPTR(f) if(!(p##f = f)){ ERR( "wineweb: %s missing from the wasm freetype archive\n", #f ); return FALSE; }
+    LOAD_FUNCPTR(FT_Done_Face)
+    LOAD_FUNCPTR(FT_Get_Char_Index)
+    LOAD_FUNCPTR(FT_Get_First_Char)
+    LOAD_FUNCPTR(FT_Get_Next_Char)
+    LOAD_FUNCPTR(FT_Get_Sfnt_Name)
+    LOAD_FUNCPTR(FT_Get_Sfnt_Name_Count)
+    LOAD_FUNCPTR(FT_Get_Sfnt_Table)
+    LOAD_FUNCPTR(FT_Get_TrueType_Engine_Type)
+    LOAD_FUNCPTR(FT_Get_WinFNT_Header)
+    LOAD_FUNCPTR(FT_Init_FreeType)
+    LOAD_FUNCPTR(FT_Library_SetLcdFilter)
+    LOAD_FUNCPTR(FT_Library_Version)
+    LOAD_FUNCPTR(FT_Load_Glyph)
+    LOAD_FUNCPTR(FT_Load_Sfnt_Table)
+    LOAD_FUNCPTR(FT_Matrix_Multiply)
+#ifndef FT_MULFIX_INLINED
+    LOAD_FUNCPTR(FT_MulFix)
+#endif
+    LOAD_FUNCPTR(FT_New_Face)
+    LOAD_FUNCPTR(FT_New_Memory_Face)
+    LOAD_FUNCPTR(FT_Outline_Embolden)
+    LOAD_FUNCPTR(FT_Outline_Get_Bitmap)
+    LOAD_FUNCPTR(FT_Outline_Get_CBox)
+    LOAD_FUNCPTR(FT_Outline_Transform)
+    LOAD_FUNCPTR(FT_Outline_Translate)
+    LOAD_FUNCPTR(FT_Property_Set)
+    LOAD_FUNCPTR(FT_Render_Glyph)
+    LOAD_FUNCPTR(FT_Set_Charmap)
+    LOAD_FUNCPTR(FT_Set_Pixel_Sizes)
+    LOAD_FUNCPTR(FT_Vector_Length)
+    LOAD_FUNCPTR(FT_Vector_Transform)
+    LOAD_FUNCPTR(FT_Vector_Unit)
+#undef LOAD_FUNCPTR
+
+    if (pFT_Init_FreeType(&library) != 0)
+    {
+        ERR( "Can't init FreeType library\n" );
+        return FALSE;
+    }
+    pFT_Library_Version( library, &FT_Version.major, &FT_Version.minor, &FT_Version.patch );
+
+    TRACE( "FreeType version is %d.%d.%d\n", FT_Version.major, FT_Version.minor, FT_Version.patch );
+    FT_SimpleVersion = ((FT_Version.major << 16) & 0xff0000) |
+                       ((FT_Version.minor <<  8) & 0x00ff00) |
+                       ((FT_Version.patch      ) & 0x0000ff);
+
+    /* In FreeType < 2.8.1 v40's FT_LOAD_TARGET_MONO has broken advance widths. */
+    if (FT_SimpleVersion < FT_VERSION_VALUE(2, 8, 1))
+    {
+        FT_UInt interpreter_version = 35;
+        pFT_Property_Set( library, "truetype", "interpreter-version", &interpreter_version );
+    }
+
+    pFT_Library_SetLcdFilter( library, FT_LCD_FILTER_DEFAULT );
+
+    return TRUE;
+#else
     ft_handle = dlopen(SONAME_LIBFREETYPE, RTLD_NOW);
     if(!ft_handle) {
         WINE_MESSAGE(
@@ -1534,6 +1748,7 @@ sym_not_found:
     dlclose(ft_handle);
     ft_handle = NULL;
     return FALSE;
+#endif /* __wasm__ */
 }
 
 /*************************************************************
@@ -1616,6 +1831,12 @@ static int calc_ppem_for_height(FT_Face ft_face, int height)
 
 static struct font_mapping *map_font_file( const char *name )
 {
+#ifdef __wasm__ /* wineweb (P3.11b): no mmap on wasi — the mem route carries
+                 * the font data (see wasm_read_font_file); table reads go
+                 * through the FT face (freetype_get_font_data's
+                 * FT_Load_Sfnt_Table), which needs no mapping. */
+    return NULL;
+#else
     struct font_mapping *mapping;
     struct stat st;
     int fd;
@@ -1653,6 +1874,7 @@ static struct font_mapping *map_font_file( const char *name )
 error:
     close( fd );
     return NULL;
+#endif /* __wasm__ */
 }
 
 static void unmap_font_file( struct font_mapping *mapping )
@@ -2058,6 +2280,19 @@ static BOOL freetype_load_font( struct gdi_font *font )
     if (!(data = calloc( 1, sizeof(*data) ))) return FALSE;
     font->private = data;
 
+#ifdef __wasm__ /* wineweb (P3.11b): the mem data wins — alloc_gdi_font
+                 * (font.c) stores both the name and the bytes on wasm, and
+                 * the unix map route is dead (map_font_file returns NULL). */
+    data_ptr = font->data_ptr;
+    data_size = font->data_size;
+    if (!data_ptr)
+    {
+        WARN( "wineweb: font %s has no in-memory data\n", debugstr_w(font->file) );
+        free( data );
+        font->private = NULL;
+        return FALSE;
+    }
+#else
     if (font->file[0])
     {
         char *filename;
@@ -2079,6 +2314,7 @@ static BOOL freetype_load_font( struct gdi_font *font )
         data_ptr = font->data_ptr;
         data_size = font->data_size;
     }
+#endif /* __wasm__ */
 
     if (pFT_New_Memory_Face( library, data_ptr, data_size, font->face_index, &ft_face )) return FALSE;
 

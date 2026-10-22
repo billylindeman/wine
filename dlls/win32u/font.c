@@ -2395,6 +2395,16 @@ static struct gdi_font *alloc_gdi_font( const WCHAR *file, void *data_ptr, SIZE_
 
     if (file)
     {
+#ifdef __wasm__ /* wineweb (P3.11b): no attributes probe on wasm — the probe
+                 * rides the client-side unix resolution (the preopen oracle,
+                 * never hydrated for fonts) and its success would drop the
+                 * in-memory bytes the freetype route loaded. The name still
+                 * rides for the enum/info paths; the size comes with the
+                 * data. */
+        font->data_ptr = data_ptr;
+        font->data_size = data_size;
+        memcpy( font->file, file, len * sizeof(WCHAR) );
+#else
         FILE_NETWORK_OPEN_INFORMATION info;
         UNICODE_STRING nt_name;
         OBJECT_ATTRIBUTES attr;
@@ -2416,6 +2426,7 @@ static struct gdi_font *alloc_gdi_font( const WCHAR *file, void *data_ptr, SIZE_
             font->data_size = info.EndOfFile.QuadPart;
             memcpy( font->file, file, len * sizeof(WCHAR) );
         }
+#endif
     }
     else
     {
@@ -6728,14 +6739,27 @@ static HKEY open_hkcu(void)
  */
 UINT font_init(void)
 {
-#ifdef __wasm__ /* wineweb: the 8x8 backend needs no registry. The boot's
-                 * HKCU/registry paths below can fail honestly (open_hkcu,
-                 * the font-cache mutant), and every early return before the
-                 * backend is set leaves font_funcs NULL — font_CreateDC then
-                 * pushes no font layer and all text silently no-ops through
-                 * the null driver (the P3.8 nonclient tranche's wall). */
-    font_funcs = init_wineweb_font_lib();
+#ifdef __wasm__ /* wineweb (P3.11b): the scalable font tier. The freetype
+                 * backend binds the wasm static lib (freetype.c's wasm
+                 * route); when it fails to init the 8x8 bitmap backend is
+                 * the named fallback — the same shape it had before this
+                 * tier. The boot's HKCU/registry paths below can fail
+                 * honestly (open_hkcu, the font-cache mutant), so the wasm
+                 * branch runs only the served registry reads: the Fonts key
+                 * (the miniserver's registry family, seeded by the boot)
+                 * and the FontSubstitutes key — no registry writes, no
+                 * HKCU, no font-cache mutant. The codepage/dpi defaults the
+                 * non-wasm path derives stay at the 96 the stock objects
+                 * were built with. */
+    if (!(font_funcs = init_freetype_lib()))
+    {
+        WARN( "wineweb: the freetype backend failed to init — the 8x8 bitmap backend is the fallback\n" );
+        font_funcs = init_wineweb_font_lib();
+    }
     if (!font_funcs) return 96;
+    load_registry_fonts();
+    load_gdi_font_subst();
+    reorder_font_list();
     font_funcs->load_fonts();
     return 96;
 #else

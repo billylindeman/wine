@@ -4,7 +4,12 @@ UNIXLIB   = win32u.so
 STATICLIB = libwin32u.a
 IMPORTLIB = win32u
 IMPORTS   = ntdll
-UNIX_CFLAGS  = $(FREETYPE_CFLAGS) $(FONTCONFIG_CFLAGS)
+# wineweb (P3.11b): the wasm freetype tier. The include path is the static
+# lib's headers (build-freetype.sh produces them, build-all step 0); the
+# wasm build is the only one that compiles this directory (the native tools
+# tree builds tools/ only). No trailing comment inside the value — make
+# passes UNIX_CFLAGS verbatim to /bin/sh.
+UNIX_CFLAGS  = $(FREETYPE_CFLAGS) $(FONTCONFIG_CFLAGS) -I$(top_srcdir)/../../build/freetype/include
 UNIX_LIBS    = $(CORETEXT_LIBS) $(APPKIT_LIBS) $(PTHREAD_LIBS) -lm
 
 EXTRADLLFLAGS = -nodefaultlibs
