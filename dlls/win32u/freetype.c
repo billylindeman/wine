@@ -1118,7 +1118,7 @@ static unsigned int wasm_read_font_file( const WCHAR *dos_name, void **out_data,
     UNICODE_STRING nt_name;
     OBJECT_ATTRIBUTES attr = { sizeof(attr) };
     HANDLE handle = 0;
-    unsigned int status, len = 0, cap = 1 << 16;
+    unsigned int status, len = 0;
     UINT64 size = 0;
     BYTE *buffer = NULL;
 
@@ -1164,22 +1164,24 @@ static unsigned int wasm_read_font_file( const WCHAR *dos_name, void **out_data,
         return status ? status : STATUS_END_OF_FILE;
     }
 
+    /* The buffer is the exact file size: every read asks for the remaining
+     * space, the server's reply never exceeds the ask (it chunks at the
+     * transport payload), so the writes stay in bounds without a grow. */
+    if (!(buffer = malloc( size )))
+    {
+        NtClose( handle );
+        return STATUS_NO_MEMORY;
+    }
+
     for (;;)
     {
-        BYTE *next;
         UINT got;
 
-        if (!(next = realloc( buffer, cap )))
-        {
-            status = STATUS_NO_MEMORY;
-            break;
-        }
-        buffer = next;
         SERVER_START_REQ( read )
         {
             memset( &req->async, 0, sizeof(req->async) );
             req->pos = 0; /* the server-side cursor advances (server.rs handle_read) */
-            wine_server_set_reply( req, buffer + len, min( cap - len, size - len ));
+            wine_server_set_reply( req, buffer + len, size - len );
             status = wine_server_call( req );
             got = wine_server_reply_size( reply );
         }
