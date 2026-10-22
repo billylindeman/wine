@@ -1053,6 +1053,14 @@ static void reorder_font_list(void)
     set_default_family( FF_SWISS, ff_swiss_default );
 }
 
+/* wineweb (P3.11b): whether the walk registered any faces at all — the
+ * named-degrade gate (the 8x8 fallback when the scalable tier added
+ * nothing). The rbtree's root is the family tree's emptiness. */
+static BOOL font_family_list_empty(void)
+{
+    return family_name_tree.root == NULL;
+}
+
 static void release_face( struct gdi_font_face *face )
 {
     if (--face->refcount) return;
@@ -6760,6 +6768,17 @@ UINT font_init(void)
     load_registry_fonts();
     load_gdi_font_subst();
     reorder_font_list();
+    if (font_family_list_empty())
+    {
+        /* The registry walk added nothing (the fonts unreadable — the
+         * pool-corridor wall, ADR-0008 P3.11b addendum): the named 8x8
+         * degrade. A zero-face list leaves the caret's line_height at 0
+         * (EDIT_CharFromPos's division) and every text request unanswered
+         * — the bitmap backend is the honest floor, not a crash. */
+        WARN( "wineweb: the scalable tier added no faces — the 8x8 bitmap backend is the fallback\n" );
+        font_funcs = init_wineweb_font_lib();
+    }
+    if (!font_funcs) return 96;
     font_funcs->load_fonts();
     return 96;
 #else
