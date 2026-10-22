@@ -1180,6 +1180,7 @@ static unsigned int wasm_read_font_file( const WCHAR *dos_name, void **out_data,
         SERVER_START_REQ( read )
         {
             memset( &req->async, 0, sizeof(req->async) );
+            req->handle = wine_server_obj_handle( handle );
             req->pos = 0; /* the server-side cursor advances (server.rs handle_read) */
             wine_server_set_reply( req, buffer + len, size - len );
             status = wine_server_call( req );
