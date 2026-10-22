@@ -1221,13 +1221,16 @@ static INT freetype_add_font( const WCHAR *file, UINT flags )
     void *data = NULL;
     UINT size = 0;
     unsigned int status = wasm_read_font_file( file, &data, &size );
+    INT ret;
 
     if (status)
     {
         WARN( "wineweb: failed to read font %s (%08x)\n", debugstr_w(file), status );
         return 0;
     }
-    return AddFontToList( file, NULL, data, size, flags );
+    ret = AddFontToList( file, NULL, data, size, flags );
+    WARN( "wineweb: font %s (%u bytes) added %d faces\n", debugstr_w(file), size, ret );
+    return ret;
 #else
     int ret = 0;
     char *unixname = NULL;

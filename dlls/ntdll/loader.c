@@ -1658,6 +1658,16 @@ NTSTATUS wineweb_ldr_init_process_defaults( PEB *peb, const WCHAR *cmdline, cons
     peb->TlsBitmap = &tls_bitmap;
     peb->TlsExpansionBitmap = &tls_expansion_bitmap;
     RtlInitializeBitMap( &tls_bitmap, peb->TlsBitmapBits, sizeof(peb->TlsBitmapBits) * 8 );
+#ifdef __wasm__ /* wineweb (P3.11b): the NT identity the boot seam owns — the
+                 * real loader's init_peb (env.c) sets it and nothing here
+                 * did, so the PEB answered VER_PLATFORM_WIN32s (0 == unset)
+                 * and win32u's is_win9x() sent the font registry walks down
+                 * the win9x key paths (the seeded Fonts key never read). */
+    peb->OSPlatformId   = VER_PLATFORM_WIN32_NT;
+    peb->OSMajorVersion = 10;
+    peb->OSMinorVersion = 0;
+    peb->OSBuildNumber  = 19045;
+#endif
     RtlInitializeBitMap( &tls_expansion_bitmap, peb->TlsExpansionBitmapBits,
                          sizeof(peb->TlsExpansionBitmapBits) * 8 );
 #ifdef __wasm__ /* wineweb (patch 0026 W6): the boot has no server socket to
