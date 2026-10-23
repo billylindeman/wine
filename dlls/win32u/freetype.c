@@ -1632,6 +1632,7 @@ static BOOL init_freetype(void)
     LOAD_FUNCPTR(FT_Load_Glyph)
     LOAD_FUNCPTR(FT_Load_Sfnt_Table)
     LOAD_FUNCPTR(FT_Matrix_Multiply)
+    LOAD_FUNCPTR(FT_MulDiv)
 #ifndef FT_MULFIX_INLINED
     LOAD_FUNCPTR(FT_MulFix)
 #endif
