@@ -331,6 +331,21 @@ static void wweb_DestroyWindow( HWND hwnd )
     if (wweb_map( hwnd, &drv )) { wineweb_drv_destroy_window( drv ); wweb_remove( hwnd ); }
 }
 
+/* The desktop's rects are staged here (the x11drv shape — X11DRV_SetDesktop-
+ * Window set_window_pos's the virtual screen when the rects are
+ * uninitialized): the guest's boot calls pSetDesktopWindow once the desktop
+ * exists, and without it every desktop-level point walk gates out on the
+ * zero rects (the S4 popup probe: get_window_children_from_point on the
+ * desktop — the #32768 popup is a desktop CHILD owned by the frame, so the
+ * frame-level walk never sees it). */
+static void wweb_SetDesktopWindow( HWND hwnd )
+{
+    unsigned int w = 0, h = 0;
+
+    if (wineweb_screen_size( &w, &h ) != 0) return;
+    NtUserSetWindowPos( hwnd, 0, 0, 0, w, h, SWP_NOZORDER | SWP_NOACTIVATE );
+}
+
 static void wweb_SetWindowText( HWND hwnd, LPCWSTR text )
 {
     uint64_t drv;
@@ -400,6 +415,10 @@ static void wweb_WindowPosChanged( HWND hwnd, HWND insert_after, HWND owner, UIN
     BOOL visible = (NtUserGetWindowLongW( hwnd, GWL_STYLE ) & WS_VISIBLE) != 0;
 
     if (surface && surface != &dummy_surface) wweb_surface_note( hwnd, surface );
+    /* The desktop never gets a host object: its rects are staged by
+     * wweb_SetDesktopWindow and its "pixels" are the compositor screen
+     * itself (the drv model's backdrop), not a window. */
+    if (is_desktop_window( hwnd )) return;
     /* The lazy create (x11's create_win_data-on-first-walk shape): a 0-size
      * create (the menu popup) skipped the host object; the first walk with a
      * real rect materializes it — the surface flush resolves the handle then
@@ -441,7 +460,7 @@ static const struct user_driver_funcs wineweb_user_driver =
     .pShowWindow = wweb_ShowWindow,
     .pProcessEvents = nodrv_ProcessEvents,
     .pWindowMessage = nodrv_WindowMessage,
-    .pSetDesktopWindow = nodrv_SetDesktopWindow,
+    .pSetDesktopWindow = wweb_SetDesktopWindow,
     .pSetWindowStyle = nodrv_SetWindowStyle,
     .pSystemParametersInfo = nodrv_SystemParametersInfo,
     .pGetCursorPos = nodrv_GetCursorPos,
