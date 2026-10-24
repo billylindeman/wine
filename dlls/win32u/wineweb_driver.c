@@ -431,6 +431,11 @@ static void wweb_WindowPosChanged( HWND hwnd, HWND insert_after, HWND owner, UIN
     BOOL visible = (NtUserGetWindowLongW( hwnd, GWL_STYLE ) & WS_VISIBLE) != 0;
 
     if (surface && surface != &dummy_surface) wweb_surface_note( hwnd, surface );
+    /* TEMP S4 probe (stripped with the evidence). */
+    {
+        uint64_t probe_drv;
+        ERR( "W6: s4 WPC hwnd %p mapped %d\n", hwnd, wweb_map( hwnd, &probe_drv ) );
+    }
     /* The desktop never gets a host object: its rects are staged by
      * wweb_SetDesktopWindow and its "pixels" are the compositor screen
      * itself (the drv model's backdrop), not a window. */
@@ -442,7 +447,10 @@ static void wweb_WindowPosChanged( HWND hwnd, HWND insert_after, HWND owner, UIN
      * deferred creates), so the probe rides behind the map check. */
     if (!wweb_map( hwnd, &drv ) && get_window_rects( hwnd, COORDS_SCREEN, &cur, get_thread_dpi() )
         && cur.window.right != cur.window.left && cur.window.bottom != cur.window.top)
-        wweb_create_drv_window( hwnd );
+    {
+        BOOL created = wweb_create_drv_window( hwnd );
+        ERR( "W6: s4 lazy create hwnd %p -> %d\n", hwnd, created );
+    }
     if (wweb_map( hwnd, &drv )) wineweb_drv_show_window( drv, visible ? 1 : 0 );
 }
 
