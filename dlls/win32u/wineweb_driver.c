@@ -205,7 +205,6 @@ static BOOL wweb_surface_flush( struct window_surface *surface, const RECT *rect
             dst[(x - dirty->left) * 4 + 3] = 0xff;                           /* A */
         }
         wineweb_drv_surface_write( s->drv, dirty->left, y, x_end - dirty->left, 1, dst );
-        if (y == dirty->top) { int wr = wineweb_drv_surface_write( s->drv, dirty->left, y, x_end - dirty->left, 1, dst); ERR( "W6: s4 write row %d w %u st %d\n", y, (unsigned)(x_end - dirty->left), wr ); }
     }
     free( dst );
     wineweb_drv_present();
@@ -233,9 +232,6 @@ static BOOL wweb_CreateWindowSurface( HWND hwnd, BOOL layered, const RECT *rect,
      * exhausted the host pool) is refused here, loudly, instead of being
      * allocated. 32768 is the same ceiling wineweb_screen_size clamps the
      * compositor canvas to. */
-    /* TEMP S4 probe (stripped with the evidence). */
-    ERR( "W6: s4 CreateWindowSurface hwnd %p layered %d rect %s\n", hwnd, layered,
-         wine_dbgstr_rect( rect ) );
     if (!width || !height || width > 0x8000 || height > 0x8000)
     {
         static int once;
@@ -306,12 +302,8 @@ static BOOL wweb_create_drv_window( HWND hwnd )
      * `goto done`s on was_visible, so pShowWindow never fires — the p38 T2
      * wall: the notepad frame sat vis=0 in the drv table). win32u's own style
      * state decides; later flips ride pWindowPosChanged below. */
-    {
-        DWORD style = NtUserGetWindowLongW( hwnd, GWL_STYLE );
-        ERR( "W6: s4 create_drv hwnd %p style %x vis %d\n", hwnd, (unsigned)style, (int)!!(style & WS_VISIBLE) );
-        if (style & WS_VISIBLE)
-            wineweb_drv_show_window( drv, 1 );
-    }
+    if (NtUserGetWindowLongW( hwnd, GWL_STYLE ) & WS_VISIBLE)
+        wineweb_drv_show_window( drv, 1 );
     return TRUE;
 }
 
@@ -436,11 +428,6 @@ static void wweb_WindowPosChanged( HWND hwnd, HWND insert_after, HWND owner, UIN
     BOOL visible = (NtUserGetWindowLongW( hwnd, GWL_STYLE ) & WS_VISIBLE) != 0;
 
     if (surface && surface != &dummy_surface) wweb_surface_note( hwnd, surface );
-    /* TEMP S4 probe (stripped with the evidence). */
-    {
-        uint64_t probe_drv;
-        ERR( "W6: s4 WPC hwnd %p mapped %d\n", hwnd, wweb_map( hwnd, &probe_drv ) );
-    }
     /* The desktop never gets a host object: its rects are staged by
      * wweb_SetDesktopWindow and its "pixels" are the compositor screen
      * itself (the drv model's backdrop), not a window. */
@@ -452,10 +439,7 @@ static void wweb_WindowPosChanged( HWND hwnd, HWND insert_after, HWND owner, UIN
      * deferred creates), so the probe rides behind the map check. */
     if (!wweb_map( hwnd, &drv ) && get_window_rects( hwnd, COORDS_SCREEN, &cur, get_thread_dpi() )
         && cur.window.right != cur.window.left && cur.window.bottom != cur.window.top)
-    {
-        BOOL created = wweb_create_drv_window( hwnd );
-        ERR( "W6: s4 lazy create hwnd %p -> %d\n", hwnd, created );
-    }
+        wweb_create_drv_window( hwnd );
     if (wweb_map( hwnd, &drv )) wineweb_drv_show_window( drv, visible ? 1 : 0 );
 }
 
