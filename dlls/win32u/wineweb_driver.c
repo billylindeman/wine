@@ -205,6 +205,7 @@ static BOOL wweb_surface_flush( struct window_surface *surface, const RECT *rect
             dst[(x - dirty->left) * 4 + 3] = 0xff;                           /* A */
         }
         wineweb_drv_surface_write( s->drv, dirty->left, y, x_end - dirty->left, 1, dst );
+        if (y == dirty->top) { int wr = wineweb_drv_surface_write( s->drv, dirty->left, y, x_end - dirty->left, 1, dst); ERR( "W6: s4 write row %d w %u st %d\n", y, (unsigned)(x_end - dirty->left), wr ); }
     }
     free( dst );
     wineweb_drv_present();
@@ -305,8 +306,12 @@ static BOOL wweb_create_drv_window( HWND hwnd )
      * `goto done`s on was_visible, so pShowWindow never fires — the p38 T2
      * wall: the notepad frame sat vis=0 in the drv table). win32u's own style
      * state decides; later flips ride pWindowPosChanged below. */
-    if (NtUserGetWindowLongW( hwnd, GWL_STYLE ) & WS_VISIBLE)
-        wineweb_drv_show_window( drv, 1 );
+    {
+        DWORD style = NtUserGetWindowLongW( hwnd, GWL_STYLE );
+        ERR( "W6: s4 create_drv hwnd %p style %x vis %d\n", hwnd, (unsigned)style, (int)!!(style & WS_VISIBLE) );
+        if (style & WS_VISIBLE)
+            wineweb_drv_show_window( drv, 1 );
+    }
     return TRUE;
 }
 
