@@ -342,10 +342,21 @@ static void wweb_SetDesktopWindow( HWND hwnd )
 {
     unsigned int w = 0, h = 0;
     int st = wineweb_screen_size( &w, &h );
-    /* TEMP S4 probe (stripped with the evidence). */
-    ERR( "W6: s4 SetDesktopWindow hwnd %p screen %ux%u st %d\n", hwnd, w, h, st );
     if (st != 0) return;
-    NtUserSetWindowPos( hwnd, 0, 0, 0, w, h, SWP_NOZORDER | SWP_NOACTIVATE );
+    /* The raw server request (the x11drv shape — NtUserSetWindowPos would
+     * route a detached desktop window to send_message(WM_WINE_SETWINDOWPOS),
+     * refused: the desktop has no owning thread). */
+    SERVER_START_REQ( set_window_pos )
+    {
+        RECT rect = { 0, 0, (LONG)w, (LONG)h };
+        req->handle    = wine_server_user_handle( hwnd );
+        req->previous  = 0;
+        req->swp_flags = SWP_NOZORDER;
+        req->window    = wine_server_rectangle( rect );
+        req->client    = req->window;
+        wine_server_call( req );
+    }
+    SERVER_END_REQ;
 }
 
 static void wweb_SetWindowText( HWND hwnd, LPCWSTR text )
