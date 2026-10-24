@@ -3560,6 +3560,10 @@ static BOOL menu_button_down( MTRACKER *pmt, UINT message, HMENU pt_menu, UINT f
         else
             ht = find_item_by_coords( ptmenu, pmt->pt, &pos );
 
+        /* TEMP S4 probe (stripped with the evidence): name the hittest. */
+        ERR( "W6: mbd pt (%d,%d) ht %d pos %d focused %d nitems %d\n",
+             pmt->pt.x, pmt->pt.y, (int)ht, (int)pos,
+             (int)ptmenu->FocusedItem, (int)ptmenu->nItems );
         if (pos != NO_SELECTED_ITEM)
         {
             if (ptmenu->FocusedItem != pos)
