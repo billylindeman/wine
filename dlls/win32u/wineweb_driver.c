@@ -341,8 +341,10 @@ static void wweb_DestroyWindow( HWND hwnd )
 static void wweb_SetDesktopWindow( HWND hwnd )
 {
     unsigned int w = 0, h = 0;
-
-    if (wineweb_screen_size( &w, &h ) != 0) return;
+    int st = wineweb_screen_size( &w, &h );
+    /* TEMP S4 probe (stripped with the evidence). */
+    ERR( "W6: s4 SetDesktopWindow hwnd %p screen %ux%u st %d\n", hwnd, w, h, st );
+    if (st != 0) return;
     NtUserSetWindowPos( hwnd, 0, 0, 0, w, h, SWP_NOZORDER | SWP_NOACTIVATE );
 }
 
