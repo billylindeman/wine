@@ -185,7 +185,7 @@ int __cdecl wineweb_atexit_take_table(void **first, void **last)
     *last  = (void **)MSVCRT_atexit_table._last;
 
     /* reverse in place: forward walk == wine's LIFO order */
-    for (lo = *first, hi = *last - 1; lo < hi; lo++, hi--)
+    for (lo = *first, hi = (void **)*last - 1; lo < hi; lo++, hi--)
     {
         tmp = *lo; *lo = *hi; *hi = tmp;
     }
