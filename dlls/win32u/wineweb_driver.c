@@ -269,7 +269,7 @@ static BOOL wweb_CreateWindowSurface( HWND hwnd, BOOL layered, const RECT *rect,
 
 /* --- the user_driver_funcs vtable ------------------------------------------ */
 
-static BOOL wweb_CreateWindow( HWND hwnd )
+static BOOL wweb_create_drv_window( HWND hwnd )
 {
     struct window_rects rects;
     RECT rect;
@@ -305,6 +305,24 @@ static BOOL wweb_CreateWindow( HWND hwnd )
     if (NtUserGetWindowLongW( hwnd, GWL_STYLE ) & WS_VISIBLE)
         wineweb_drv_show_window( drv, 1 );
     return TRUE;
+}
+
+static BOOL wweb_CreateWindow( HWND hwnd )
+{
+    struct window_rects rects;
+    RECT rect;
+
+    if (!get_window_rects( hwnd, COORDS_SCREEN, &rects, get_thread_dpi() )) return FALSE;
+    rect = rects.window;
+    /* A 0-size create has no host object yet — the x11 shape: X11DRV_CreateWindow
+     * returns TRUE unconditionally and the X window materializes on the first
+     * pos walk (create_win_data). The menu popup is created exactly so
+     * (init_popup's `0, 0, 0, 0` — menu.c:3356) and is sized by show_popup's
+     * SetWindowPos (menu.c:3130); failing the create here (the S4 wall) killed
+     * init_popup before any paint. The first wweb_WindowPosChanged with a real
+     * rect creates the host object; the flush resolves the handle then. */
+    if (rect.right == rect.left || rect.bottom == rect.top) return TRUE;
+    return wweb_create_drv_window( hwnd );
 }
 
 static void wweb_DestroyWindow( HWND hwnd )
@@ -378,9 +396,18 @@ static void wweb_WindowPosChanged( HWND hwnd, HWND insert_after, HWND owner, UIN
                                    const struct window_rects *rects, struct window_surface *surface )
 {
     uint64_t drv;
+    struct window_rects cur;
     BOOL visible = (NtUserGetWindowLongW( hwnd, GWL_STYLE ) & WS_VISIBLE) != 0;
 
     if (surface && surface != &dummy_surface) wweb_surface_note( hwnd, surface );
+    /* The lazy create (x11's create_win_data-on-first-walk shape): a 0-size
+     * create (the menu popup) skipped the host object; the first walk with a
+     * real rect materializes it — the surface flush resolves the handle then
+     * (the wweb_surface_flush contract). Map-less windows are rare (only the
+     * deferred creates), so the probe rides behind the map check. */
+    if (!wweb_map( hwnd, &drv ) && get_window_rects( hwnd, COORDS_SCREEN, &cur, get_thread_dpi() )
+        && cur.window.right != cur.window.left && cur.window.bottom != cur.window.top)
+        wweb_create_drv_window( hwnd );
     if (wweb_map( hwnd, &drv )) wineweb_drv_show_window( drv, visible ? 1 : 0 );
 }
 
