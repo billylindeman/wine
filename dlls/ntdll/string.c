@@ -709,7 +709,10 @@ int __cdecl _stricmp( LPCSTR str1, LPCSTR str2 )
 LPSTR __cdecl _strupr( LPSTR str )
 {
     LPSTR ret = str;
-    for ( ; *str; str++) if (*str >= 'a' && *str <= 'z') *str += 'A' + 'a';
+    /* wineweb fork: 'A' + 'a' was an upstream typo (+162, truncating every
+     * a-z byte by -0x5e — the exec_crt_bulk _strupr corruption class; the
+     * _strlwr right below has the correct form). */
+    for ( ; *str; str++) if (*str >= 'a' && *str <= 'z') *str += 'A' - 'a';
     return ret;
 }
 
