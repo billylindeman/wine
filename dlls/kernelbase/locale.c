@@ -435,6 +435,11 @@ static CRITICAL_SECTION_DEBUG critsect_debug =
 static CRITICAL_SECTION locale_section = { &critsect_debug, -1, 0, 0, 0, 0 };
 
 
+/* wineweb fork: wine's own NLS data images (nls/*.nls at the pin),
+ * compiled into the module — see nls_data.c. */
+extern const unsigned char wineweb_locale_nls[];
+extern const unsigned char wineweb_sortdefault_nls[];
+
 static void load_locale_nls(void)
 {
     struct
@@ -463,6 +468,20 @@ static void load_locale_nls(void)
     unsigned int i;
 
     RtlGetLocaleFileMappingAddress( (void **)&header, &system_lcid, &dummy );
+    if (!header->locales)
+    {
+        /* wineweb fork: no real NLS file mapping on the wasm runtime — the
+         * nls_zero_section seam answers with a 64KB zero section (ADR-0008
+         * R7d addendum, TODO(P6)), leaving every derived table empty and
+         * the LCMap/ctype families dead (LCMapStringW returned 0 — the
+         * _strupr corruption class). Fall back to wine's own data compiled
+         * into the module: the same image NtInitializeNlsFiles would map
+         * (nls/locale.nls), staged in the data segment (the R7d c_1252
+         * precedent). en-US is the honest system locale — it is the ACP
+         * the PEB's staged tables carry. */
+        header = (void *)wineweb_locale_nls;
+        system_lcid = MAKELANGID( LANG_ENGLISH, SUBLANG_DEFAULT );
+    }
     locale_table = (const NLS_LOCALE_HEADER *)((char *)header + header->locales);
     lcids_index = (const NLS_LOCALE_LCID_INDEX *)((char *)locale_table + locale_table->lcids_offset);
     lcnames_index = (const NLS_LOCALE_LCNAME_INDEX *)((char *)locale_table + locale_table->lcnames_offset);
@@ -494,6 +513,14 @@ static void load_sortdefault_nls(void)
     const struct sort_compression *last_compr;
 
     NtGetNlsSectionPtr( 9, 0, NULL, (void **)&header, &size );
+    if (!header->sortkeys)
+    {
+        /* wineweb fork: same story as load_locale_nls — the zero-section
+         * seam leaves sort.casemap/ctypes/guids empty (the casing path
+         * reads sort.casemap, lcmap_string's case_table). Fall back to the
+         * embedded image (nls/sortdefault.nls). */
+        header = (void *)wineweb_sortdefault_nls;
+    }
 
     sort.keys = (UINT *)((char *)header + header->sortkeys);
     sort.casemap = (USHORT *)((char *)header + header->casemaps);
@@ -2010,6 +2037,23 @@ void init_locale( HMODULE module )
         user_ui_locale = get_locale_by_name( strW.Buffer, &user_ui_lcid );
         if (user_ui_lcid == LOCALE_CUSTOM_UNSPECIFIED) user_ui_lcid = LOCALE_CUSTOM_UI_DEFAULT;
         RtlFreeUnicodeString( &strW );
+    }
+
+    /* wineweb fork: ntdll's locale route is the same zero-section seam, so
+     * both RtlLcidToLocaleName calls fail and leave user_locale NULL —
+     * poisoning get_language_sort's sentinel walk (the LCMap family's
+     * LOCALE_SYSTEM/USER_DEFAULT path reads user_locale->sname). Fall back
+     * to this module's own staged table; system_lcid already carries the
+     * en-US identity load_locale_nls staged. */
+    if (!user_locale)
+    {
+        user_lcid = system_lcid;
+        user_locale = NlsValidateLocale( &user_lcid, 0 );
+    }
+    if (!user_ui_locale)
+    {
+        user_ui_lcid = system_lcid;
+        user_ui_locale = NlsValidateLocale( &user_ui_lcid, 0 );
     }
 
     if (GetEnvironmentVariableW( L"WINEUNIXCP", bufferW, ARRAY_SIZE(bufferW) ))

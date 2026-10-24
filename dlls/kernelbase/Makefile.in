@@ -17,6 +17,7 @@ SOURCES = \
 	locale.c \
 	main.c \
 	memory.c \
+	nls_data.c \
 	path.c \
 	process.c \
 	registry.c \
