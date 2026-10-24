@@ -232,6 +232,9 @@ static BOOL wweb_CreateWindowSurface( HWND hwnd, BOOL layered, const RECT *rect,
      * exhausted the host pool) is refused here, loudly, instead of being
      * allocated. 32768 is the same ceiling wineweb_screen_size clamps the
      * compositor canvas to. */
+    /* TEMP S4 probe (stripped with the evidence). */
+    ERR( "W6: s4 CreateWindowSurface hwnd %p layered %d rect %s\n", hwnd, layered,
+         wine_dbgstr_rect( rect ) );
     if (!width || !height || width > 0x8000 || height > 0x8000)
     {
         static int once;
