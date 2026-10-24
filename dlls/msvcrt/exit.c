@@ -148,6 +148,57 @@ static void call_atexit(void)
     execute_onexit_table(&MSVCRT_atexit_table);
 }
 
+#ifdef __wasm__ /* wineweb: the atexit handlers are guest code */
+/*
+ * wineweb: hand the atexit table to the wasm runtime's exit dispatch.
+ *
+ * The handlers are guest function pointers (the PE's own code); the native
+ * walk's `(*func)()` is a wasm call_indirect through a guest VA — out of
+ * bounds for the module's function table (the P3.3 constraint: a builtin
+ * cannot call guest code). The runtime's exit dispatch walks them through
+ * the driver-mediated guest-call contract (the _initterm precedent,
+ * tools/builtins/wine/l3_callback.c) instead, so the native body must not
+ * call them.
+ *
+ * This accessor performs execute_onexit_table's wine-faithful table
+ * mechanics without the calls: under the exit lock, snapshot the entry
+ * range, reverse it in place (the contract's walk is forward; wine's
+ * atexit order is LIFO), clear and re-init the table (a handler
+ * registering during the walk lands in a fresh table, run at the next
+ * exit — the same contract as the copy above), and return the entry
+ * count. The entries' memory stays valid: the runtime's allocator never
+ * reuses a block.
+ */
+int __cdecl wineweb_atexit_take_table(void **first, void **last)
+{
+    void **lo, **hi, *tmp;
+    int n = 0;
+
+    LOCK_EXIT;
+    if (!MSVCRT_atexit_table._first || MSVCRT_atexit_table._first >= MSVCRT_atexit_table._last)
+    {
+        LeaveCriticalSection(&MSVCRT_onexit_cs);
+        *first = *last = NULL;
+        return 0;
+    }
+    *first = (void **)MSVCRT_atexit_table._first;
+    *last  = (void **)MSVCRT_atexit_table._last;
+
+    /* reverse in place: forward walk == wine's LIFO order */
+    for (lo = *first, hi = *last - 1; lo < hi; lo++, hi--)
+    {
+        tmp = *lo; *lo = *hi; *hi = tmp;
+    }
+
+    memset(&MSVCRT_atexit_table, 0, sizeof(MSVCRT_atexit_table));
+    initialize_onexit_table(&MSVCRT_atexit_table);
+    LeaveCriticalSection(&MSVCRT_onexit_cs);
+
+    for (lo = *first; lo < (void **)*last; lo++) n++;
+    return n;
+}
+#endif
+
 /*********************************************************************
  *		__dllonexit (MSVCRT.@)
  */
