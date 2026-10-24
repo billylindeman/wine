@@ -379,16 +379,6 @@ static SCRIPT_STRING_ANALYSIS EDIT_UpdateUniscribeData_linedef(EDITSTATE *es, HD
 	if (!line_def)
 		return NULL;
 
-#ifdef __wasm__ /* wineweb: the uniscribe render path is dead on this route —
-                 * ScriptTextOut bails at init_script_cache (the 8x8 engine
-                 * has no sfnt data for the script cache) before its
-                 * ExtTextOutW, so an analysed line renders nothing. Wine's
-                 * own fallback (ssa == NULL → EDIT_PaintText → ExtTextOut)
-                 * draws the same string through the same engine; yield to
-                 * it (the T3 render leg). */
-	return NULL;
-#endif
-
 	if (line_def->net_length && !line_def->ssa)
 	{
 		int index = line_def->index;
@@ -439,10 +429,6 @@ static SCRIPT_STRING_ANALYSIS EDIT_UpdateUniscribeData(EDITSTATE *es, HDC dc, IN
 
 	if (!(es->style & ES_MULTILINE))
 	{
-#ifdef __wasm__ /* wineweb: the same uniscribe divergence as the multiline
-                 * variant above — the ExtTextOut fallback draws. */
-		return NULL;
-#endif
 		if (!es->ssa)
 		{
 			INT length = get_text_length(es);
