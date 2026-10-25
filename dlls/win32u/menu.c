@@ -2424,14 +2424,9 @@ static void draw_menu_item( HWND hwnd, struct menu *menu, HWND owner, HDC hdc,
     if (!menu_bar)
     {
         BITMAP bmp;
-        int wws8_ret;
-        memset( &bmp, 0xaa, sizeof(bmp) );
-        wws8_ret = NtGdiExtGetObjectW( get_arrow_bitmap(), sizeof(bmp), &bmp );
+        NtGdiExtGetObjectW( get_arrow_bitmap(), sizeof(bmp), &bmp );
         arrow_width = bmp.bmWidth;
         arrow_height = bmp.bmHeight;
-#ifdef __wasm__ /* wineweb: S8 arrow probe (stripped post-block) */
-        ERR( "WWS8 arrow: hbm %p getobj %d w %d h %d planes %d\n", get_arrow_bitmap(), wws8_ret, bmp.bmWidth, bmp.bmHeight, bmp.bmPlanes );
-#endif
     }
 
     if (item->fType & MF_SYSMENU)
@@ -2725,10 +2720,6 @@ static void draw_menu_item( HWND hwnd, struct menu *menu, HWND owner, HDC hdc,
             NtGdiGetAndSetDCDword( hdc, NtGdiSetTextColor, RGB(0x80, 0x80, 0x80), NULL );
         }
 
-#ifdef __wasm__ /* wineweb: S8 menu probe — the rect at the DrawTextW call (stripped post-block) */
-        ERR( "WWS8 menudraw id %d rect %s xTab %d textOff %d\n", item->wID, wine_dbgstr_rect( &rect ),
-             item->xTab, menu->textOffset );
-#endif
         DrawTextW( hdc, item->text, i, &rect, format );
 
         /* paint the shortcut text */

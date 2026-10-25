@@ -693,25 +693,6 @@ static void draw_glyph( dib_info *dib, int x, int y, const GLYPHMETRICS *metrics
     rect.bottom = rect.top   + metrics->gmBlackBoxY;
     if (bounds) add_bounds_rect( bounds, &rect );
 
-#ifdef __wasm__ /* wineweb: S8 glyph probe — the glyph's dst rect + the clip intersection (stripped post-block) */
-    if (dib->bit_count == 32 && dib->rect.right - dib->rect.left > 64 && dib->rect.right - dib->rect.left < 256
-        && dib->rect.bottom - dib->rect.top > 64 && dib->rect.bottom - dib->rect.top < 256)
-    {
-        static int wws8_gn;
-        if (wws8_gn < 60)
-        {
-            RECT wws8_ix = {0, 0, 0, 0};
-            wws8_gn++;
-            if (clipped_rects->count && intersect_rect( &wws8_ix, &rect, clipped_rects->rects ))
-                ERR( "WWS8 glyph #%d dst %s clip0 %s ix %s\n", wws8_gn, wine_dbgstr_rect( &rect ),
-                     wine_dbgstr_rect( clipped_rects->rects ), wine_dbgstr_rect( &wws8_ix ) );
-            else
-                ERR( "WWS8 glyph #%d dst %s NO-CLIP-INTERSECT clip0 %s n %u\n", wws8_gn, wine_dbgstr_rect( &rect ),
-                     clipped_rects->count ? wine_dbgstr_rect( clipped_rects->rects ) : "(none)", clipped_rects->count );
-        }
-    }
-#endif
-
     for (i = 0; i < clipped_rects->count; i++)
     {
         if (intersect_rect( &clipped_rect, &rect, clipped_rects->rects + i ))
@@ -954,64 +935,6 @@ BOOL dibdrv_ExtTextOut( PHYSDEV dev, INT x, INT y, UINT flags,
                    &clipped_rects, &bounds );
 
 done:
-#ifdef __wasm__ /* wineweb: S8 text probe — the draw's accumulated bounds + the surface-bounds marking (stripped post-block) */
-    {
-        extern int wws8_texts;
-        static int wws8_eto_n;
-        if (pdev->dib.bit_count == 32
-            && pdev->dib.rect.right - pdev->dib.rect.left > 64 && pdev->dib.rect.right - pdev->dib.rect.left < 256
-            && pdev->dib.rect.bottom - pdev->dib.rect.top > 64 && pdev->dib.rect.bottom - pdev->dib.rect.top < 256
-            && wws8_eto_n < 120)
-        {
-            RECT wws8_pre, wws8_clip = {0, 0, 0, 0};
-            wws8_eto_n++;
-            wws8_texts++;
-            if (pdev->bounds) wws8_pre = *pdev->bounds;
-            else { wws8_pre.left = wws8_pre.top = wws8_pre.right = wws8_pre.bottom = -7777; }
-            if (pdev->clip)
-            {
-                const WINEREGION *wws8_rgn = get_wine_region( pdev->clip );
-                if (wws8_rgn)
-                {
-                    wws8_clip = wws8_rgn->extents;
-                    ERR( "WWS8 rgn #%d nrects %d r0 %s r1 %s\n", wws8_texts, wws8_rgn->numRects,
-                         wine_dbgstr_rect( &wws8_rgn->rects[0] ),
-                         wws8_rgn->numRects > 1 ? wine_dbgstr_rect( &wws8_rgn->rects[1] ) : "(none)" );
-                    release_wine_region( pdev->clip );
-                }
-            }
-            add_clipped_bounds( pdev, &bounds, pdev->clip );
-            /* the mini row census: where the ink actually is after this draw */
-            {
-                const unsigned char *wws8_bits = pdev->dib.bits.ptr;
-                int wws8_w = pdev->dib.rect.right - pdev->dib.rect.left;
-                int wws8_first = -1, wws8_last = -1, wws8_y, wws8_x;
-                unsigned wws8_cnt = 0;
-                for (wws8_y = 0; wws8_y < pdev->dib.rect.bottom - pdev->dib.rect.top; wws8_y++)
-                {
-                    const unsigned char *wws8_row = wws8_bits + (size_t)wws8_y * pdev->dib.stride;
-                    for (wws8_x = 0; wws8_x < wws8_w; wws8_x++)
-                        if (!wws8_row[wws8_x*4] && !wws8_row[wws8_x*4+1] && !wws8_row[wws8_x*4+2])
-                        { wws8_cnt++; if (wws8_first < 0) wws8_first = wws8_y; wws8_last = wws8_y; break; }
-                }
-                ERR( "WWS8 ink after #%d: black rows %u range %d..%d bits %p\n", wws8_texts, wws8_cnt, wws8_first, wws8_last, pdev->dib.bits.ptr );
-            }
-            {
-                WCHAR wws8_buf[8];
-                UINT wws8_i;
-                for (wws8_i = 0; wws8_i < count && wws8_i < 7; wws8_i++) wws8_buf[wws8_i] = str[wws8_i];
-                wws8_buf[wws8_i] = 0;
-                ERR( "WWS8 draw #%d xy %d,%d flags %x count %u rect %s str %s\n", wws8_texts, x, y, flags, count,
-                     wine_dbgstr_rect( rect ), wine_dbgstr_wn( wws8_buf, wws8_i ) );
-            }
-            ERR( "WWS8 eto #%d dib %s draw %s clip %s nrects %u pre %s post %s bnd %p\n", wws8_texts, wine_dbgstr_rect( &pdev->dib.rect ),
-                 wine_dbgstr_rect( &bounds ), wine_dbgstr_rect( &wws8_clip ), clipped_rects.count, wine_dbgstr_rect( &wws8_pre ),
-                 wine_dbgstr_rect( pdev->bounds ? pdev->bounds : &wws8_pre ), (void *)pdev->bounds );
-            free_clipped_rects( &clipped_rects );
-            return TRUE;
-        }
-    }
-#endif
     add_clipped_bounds( pdev, &bounds, pdev->clip );
     free_clipped_rects( &clipped_rects );
     return TRUE;
