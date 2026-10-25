@@ -1946,7 +1946,27 @@ static HBITMAP get_arrow_bitmap(void)
     static HBITMAP arrow_bitmap;
 
     if (!arrow_bitmap)
+    {
+        /* wineweb: the OBM_MNARROW system bitmap lives in user32's own PE
+         * resources, and the wasm builtin has no resource section — the
+         * NtUserLoadImage callback answers 0. menu.c:2651 then runs
+         * rect.right -= arrow_width on the uninitialized stack BITMAP
+         * (the S8 paint/flush tear's named root cause: every item text
+         * rect's right becomes garbage, the DrawTextW clip no-ops most
+         * glyphs, and only the rows the garbage clip happens to overlap
+         * reach the DIB). Embed the resource's own bits verbatim
+         * (dlls/user32/resources/obm_mnarrow.bmp — 7x11, 1bpp, the GDI
+         * 2-byte pitch) and create the GDI object directly when the load
+         * fails; wine's resource path stays first. */
+        static const BYTE arrow_bits[] =
+        {
+            0xfe, 0x00, 0xbe, 0x00, 0x9e, 0x00, 0x8e, 0x00, 0x86, 0x00, 0x82,
+            0x00, 0x86, 0x00, 0x8e, 0x00, 0x9e, 0x00, 0xbe, 0x00, 0xfe, 0x00
+        };
         arrow_bitmap = LoadImageW( 0, MAKEINTRESOURCEW(OBM_MNARROW), IMAGE_BITMAP, 0, 0, 0 );
+        if (!arrow_bitmap)
+            arrow_bitmap = NtGdiCreateBitmap( 7, 11, 1, 1, arrow_bits );
+    }
     return arrow_bitmap;
 }
 
@@ -2404,9 +2424,14 @@ static void draw_menu_item( HWND hwnd, struct menu *menu, HWND owner, HDC hdc,
     if (!menu_bar)
     {
         BITMAP bmp;
-        NtGdiExtGetObjectW( get_arrow_bitmap(), sizeof(bmp), &bmp );
+        int wws8_ret;
+        memset( &bmp, 0xaa, sizeof(bmp) );
+        wws8_ret = NtGdiExtGetObjectW( get_arrow_bitmap(), sizeof(bmp), &bmp );
         arrow_width = bmp.bmWidth;
         arrow_height = bmp.bmHeight;
+#ifdef __wasm__ /* wineweb: S8 arrow probe (stripped post-block) */
+        ERR( "WWS8 arrow: hbm %p getobj %d w %d h %d planes %d\n", get_arrow_bitmap(), wws8_ret, bmp.bmWidth, bmp.bmHeight, bmp.bmPlanes );
+#endif
     }
 
     if (item->fType & MF_SYSMENU)
@@ -2700,6 +2725,10 @@ static void draw_menu_item( HWND hwnd, struct menu *menu, HWND owner, HDC hdc,
             NtGdiGetAndSetDCDword( hdc, NtGdiSetTextColor, RGB(0x80, 0x80, 0x80), NULL );
         }
 
+#ifdef __wasm__ /* wineweb: S8 menu probe — the rect at the DrawTextW call (stripped post-block) */
+        ERR( "WWS8 menudraw id %d rect %s xTab %d textOff %d\n", item->wID, wine_dbgstr_rect( &rect ),
+             item->xTab, menu->textOffset );
+#endif
         DrawTextW( hdc, item->text, i, &rect, format );
 
         /* paint the shortcut text */

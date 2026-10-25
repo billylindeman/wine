@@ -682,6 +682,58 @@ void window_surface_flush( struct window_surface *surface )
 
     OffsetRect( &dirty, -dirty.left, -dirty.top );
 
+#ifdef __wasm__ /* wineweb: S8 flush probe — the per-flush bounds + dirty + the DIB row map (stripped post-block) */
+    if (surface->rect.right - surface->rect.left == 256 && surface->rect.bottom - surface->rect.top == 256)
+    {
+        static int wws8_flushes;
+        extern int wws8_texts;
+        if (wws8_flushes < 100)
+        {
+            char bmi_buf[FIELD_OFFSET( BITMAPINFO, bmiColors[256] )];
+            BITMAPINFO *bmi = (BITMAPINFO *)bmi_buf;
+            const unsigned char *bits = window_surface_get_color( surface, bmi );
+            if (bits)
+            {
+                int w = bmi->bmiHeader.biWidth, h = -bmi->bmiHeader.biHeight;
+                int stride = w * 4, y, x, yi;
+                unsigned black_rows = 0, first_black = 0xffffffff, last_black = 0;
+                unsigned bg3d = 0, white = 0;
+                RECT ix, d2 = surface->rect;
+                BOOL push;
+                char map[65];
+                OffsetRect( &d2, -d2.left, -d2.top );
+                push = intersect_rect( &ix, &d2, &bounds );
+                for (yi = 0; yi < 32; yi++) map[yi] = 0;
+                for (y = 0; y < h && y < 256; y++)
+                {
+                    int black = 0, is3d = 0, isw = 0;
+                    const unsigned char *row = bits + (size_t)y * stride;
+                    for (x = 0; x < w; x++)
+                    {
+                        unsigned b = row[x*4], g = row[x*4+1], r = row[x*4+2];
+                        if (!r && !g && !b) black = 1;
+                        else if (r == 212 && g == 208 && b == 200) is3d = 1;
+                        else if (r == 255 && g == 255 && b == 255) isw = 1;
+                    }
+                    if (black) { map[y >> 3] |= 1 << (y & 7); black_rows++; if (y < first_black) first_black = y; if (y > last_black) last_black = y; }
+                    if (is3d) bg3d++;
+                    if (isw) white++;
+                }
+                {
+                    char hex[65];
+                    for (yi = 0; yi < 32; yi++) sprintf( hex + yi*2, "%02x", map[yi] & 0xff );
+                    hex[64] = 0;
+                    ERR( "WWS8 flush #%d hwnd %p surf %p bnd %p texts %u push %d bounds %s dirty %s black %u range %u..%u bg3d %u white %u map %s\n",
+                         wws8_flushes, surface->hwnd, (void *)surface, (void *)&surface->bounds, wws8_texts, push, wine_dbgstr_rect( &bounds ),
+                         push ? wine_dbgstr_rect( &ix ) : "(none)", black_rows,
+                         black_rows ? first_black : 0, black_rows ? last_black : 0, bg3d, white, hex );
+                }
+            }
+            wws8_flushes++;
+        }
+    }
+#endif
+
     if (intersect_rect( &dirty, &dirty, &bounds ) && (color_bits = window_surface_get_color( surface, color_info )))
     {
         BOOL shape_changed = update_surface_shape( surface, &surface->rect, &dirty, color_info, color_bits );

@@ -299,10 +299,31 @@ int get_clipped_rects( const dib_info *dib, const RECT *rc, HRGN clip, struct cl
     return clip_rects->count;
 }
 
+#ifdef __wasm__ /* wineweb: S8 probe — the popup-DIB text-draw + primitive counters (stripped post-block) */
+int wws8_texts;
+#endif
+
 void add_clipped_bounds( dibdrv_physdev *dev, const RECT *rect, HRGN clip )
 {
     const WINEREGION *region;
     RECT rc;
+#ifdef __wasm__ /* wineweb: S8 bounds probe — every popup-DIB primitive's bound-marking, in order (stripped post-block) */
+    RECT wws8_pre;
+    int wws8_dump = 0;
+    if (dev->dib.bit_count == 32
+        && dev->dib.rect.right - dev->dib.rect.left > 64 && dev->dib.rect.right - dev->dib.rect.left < 256
+        && dev->dib.rect.bottom - dev->dib.rect.top > 64 && dev->dib.rect.bottom - dev->dib.rect.top < 256)
+    {
+        static int wws8_n;
+        if (wws8_n < 120)
+        {
+            wws8_n++;
+            wws8_dump = 1;
+            if (dev->bounds) wws8_pre = *dev->bounds;
+            else { wws8_pre.left = wws8_pre.top = wws8_pre.right = wws8_pre.bottom = -7777; }
+        }
+    }
+#endif
 
     if (!dev->bounds) return;
     if (clip)
@@ -317,6 +338,15 @@ void add_clipped_bounds( dibdrv_physdev *dev, const RECT *rect, HRGN clip )
     if (IsRectEmpty( &rc )) return;
     OffsetRect( &rc, dev->dib.rect.left, dev->dib.rect.top );
     add_bounds_rect( dev->bounds, &rc );
+
+#ifdef __wasm__ /* wineweb: S8 bounds probe dump */
+    if (wws8_dump)
+    {
+        RECT post = dev->bounds ? *dev->bounds : wws8_pre;
+        ERR( "WWS8 ab dib %s in %s pre %s post %s\n", wine_dbgstr_rect( &dev->dib.rect ),
+             wine_dbgstr_rect( rect ), wine_dbgstr_rect( &wws8_pre ), wine_dbgstr_rect( &post ) );
+    }
+#endif
 }
 
 /**********************************************************************
@@ -563,6 +593,13 @@ void dibdrv_set_window_surface( DC *dc, struct window_surface *surface )
     struct windrv_physdev *physdev;
     struct dibdrv_physdev *dibdrv;
     BITMAPOBJ *bmp;
+
+#ifdef __wasm__ /* wineweb: S8 rebind probe — every window-surface (re)binding of a 256x256 surface (stripped post-block) */
+    if (surface && surface != &dummy_surface
+        && surface->rect.right - surface->rect.left == 256 && surface->rect.bottom - surface->rect.top == 256)
+        ERR( "WWS8 rebind dc %p surf %p vis %s dev %s\n", dc->hSelf, (void *)surface,
+             wine_dbgstr_rect( &dc->attr->vis_rect ), wine_dbgstr_rect( &dc->device_rect ) );
+#endif
 
     TRACE( "%p %p\n", dc->hSelf, surface );
 
