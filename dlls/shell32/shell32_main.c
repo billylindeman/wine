@@ -913,6 +913,10 @@ static INT_PTR CALLBACK AboutDlgProc( HWND hWnd, UINT msg, WPARAM wParam,
                 SendDlgItemMessageW(hWnd, stc1, STM_SETICON,(WPARAM)info->hIcon, 0);
                 GetWindowTextW( hWnd, template, ARRAY_SIZE(template) );
                 swprintf( buffer, ARRAY_SIZE(buffer), template, info->szApp );
+#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) — the caption format */
+                ERR( "WWS11 initdialog: template %s app %s formatted %s\n",
+                     debugstr_w( template ), debugstr_w( info->szApp ), debugstr_w( buffer ) );
+#endif
                 SetWindowTextW( hWnd, buffer );
                 SetWindowTextW( GetDlgItem(hWnd, IDC_ABOUT_STATIC_TEXT1), info->szApp );
                 SetWindowTextW( GetDlgItem(hWnd, IDC_ABOUT_STATIC_TEXT2), info->szOtherStuff );
