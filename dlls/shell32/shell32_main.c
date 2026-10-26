@@ -1010,6 +1010,16 @@ BOOL WINAPI ShellAboutA( HWND hWnd, LPCSTR szApp, LPCSTR szOtherStuff, HICON hIc
 BOOL WINAPI ShellAboutW( HWND hWnd, LPCWSTR szApp, LPCWSTR szOtherStuff,
                              HICON hIcon )
 {
+#ifdef __wasm__ /* wineweb: S12 probe (stripped post-block) — the About re-fire census */
+    {
+        __attribute__((import_module("wineweb_host"), import_name("log")))
+        extern void wineweb_host_log(unsigned int level, const char *ptr, unsigned int len);
+        static unsigned s12_shellabout_calls;
+        char buf[64];
+        int n = snprintf( buf, sizeof(buf), "WWS12 shellabout call %u\n", ++s12_shellabout_calls );
+        wineweb_host_log( 0, buf, n );
+    }
+#endif
     ABOUT_INFO info;
     LOGFONTW logFont;
     BOOL bRet;
