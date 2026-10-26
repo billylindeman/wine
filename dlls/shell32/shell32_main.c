@@ -913,10 +913,6 @@ static INT_PTR CALLBACK AboutDlgProc( HWND hWnd, UINT msg, WPARAM wParam,
                 SendDlgItemMessageW(hWnd, stc1, STM_SETICON,(WPARAM)info->hIcon, 0);
                 GetWindowTextW( hWnd, template, ARRAY_SIZE(template) );
                 swprintf( buffer, ARRAY_SIZE(buffer), template, info->szApp );
-#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) — the caption format */
-                ERR( "WWS11 initdialog: template %s app %s formatted %s\n",
-                     debugstr_w( template ), debugstr_w( info->szApp ), debugstr_w( buffer ) );
-#endif
                 SetWindowTextW( hWnd, buffer );
                 SetWindowTextW( GetDlgItem(hWnd, IDC_ABOUT_STATIC_TEXT1), info->szApp );
                 SetWindowTextW( GetDlgItem(hWnd, IDC_ABOUT_STATIC_TEXT2), info->szOtherStuff );
@@ -1025,15 +1021,7 @@ BOOL WINAPI ShellAboutW( HWND hWnd, LPCWSTR szApp, LPCWSTR szOtherStuff,
     info.szOtherStuff = szOtherStuff;
     info.hIcon        = hIcon;
 
-    memset( &logFont, 0xaa, sizeof(logFont) ); /* wineweb: S11 probe — the S8 uninitialized-struct class if SPI leaves it */
-    {
-        BOOL spi_ret = SystemParametersInfoW( SPI_GETICONTITLELOGFONT, 0, &logFont, 0 );
-#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) */
-        ERR( "WWS11 shellabout: hInst %p icon %p spi %d lfHeight %d lfWidth %d face %s\n",
-             shell32_hInstance, hIcon, spi_ret, logFont.lfHeight, logFont.lfWidth,
-             spi_ret ? debugstr_w(logFont.lfFaceName) : "(spi failed)" );
-#endif
-    }
+    SystemParametersInfoW( SPI_GETICONTITLELOGFONT, 0, &logFont, 0 );
     info.hFont = CreateFontIndirectW( &logFont );
 
     bRet = DialogBoxParamW( shell32_hInstance, L"SHELL_ABOUT_MSGBOX", hWnd, AboutDlgProc, (LPARAM)&info );
@@ -1116,9 +1104,6 @@ BOOL WINAPI ShellAboutW( HWND hWnd, LPCWSTR szApp, LPCWSTR szOtherStuff,
 
         bRet = DialogBoxIndirectParamW( shell32_hInstance, (LPCDLGTEMPLATEW)template_buf,
                                         hWnd, AboutDlgProc, (LPARAM)&info );
-#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) — the fallback's outcome */
-        ERR( "WWS11 fallback: DialogBoxIndirectParamW ret %ld\n", (long)bRet );
-#endif
     }
     DeleteObject(info.hFont);
     return bRet;

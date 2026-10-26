@@ -301,31 +301,9 @@ static BOOL wweb_create_drv_window( HWND hwnd )
     title_utf8[i] = 0;
 
     if (wineweb_drv_create_window( rect.left, rect.top, rect.right - rect.left,
-                                   rect.bottom - rect.top, title_utf8, i, &drv ) != 0)
-    {
-#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) — the drv create's status */
-        {
-            int32_t st = wineweb_drv_create_window( rect.left, rect.top, rect.right - rect.left,
-                                                    rect.bottom - rect.top, title_utf8, i, &drv );
-            ERR( "WWS11 pcreate: status %d rect %ld,%ld %ldx%ld hwnd %p\n", st,
-                 (long)rect.left, (long)rect.top, (long)(rect.right - rect.left),
-                 (long)(rect.bottom - rect.top), hwnd );
-        }
-#endif
-        return FALSE;
-    }
+                                   rect.bottom - rect.top, title_utf8, i, &drv ) != 0) return FALSE;
     if (!wweb_add( hwnd, drv, rect.right - rect.left, rect.bottom - rect.top ))
-        {
-#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) — the host-map's occupancy */
-            {
-                unsigned i_;
-                for (i_ = 0; i_ < WWEB_MAX_WINDOWS; i_++)
-                    ERR( "WWS11 map[%u] hwnd %p drv %llu\n", i_, wweb_windows[i_].hwnd,
-                         (unsigned long long)wweb_windows[i_].drv );
-            }
-#endif
-            wineweb_drv_destroy_window( drv ); return FALSE;
-        }
+        { wineweb_drv_destroy_window( drv ); return FALSE; }
     /* The create-time visibility truth: pCreateWindow is the LAST driver call
      * of the create walk, and a window created with WS_VISIBLE never takes
      * another pos walk before the message loop (show_window's SW_SHOW case

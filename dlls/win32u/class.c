@@ -574,9 +574,6 @@ static CLASS *find_class( HINSTANCE module, UNICODE_STRING *name )
     {
         UINT_PTR class_instance = get_class_instance( class );
         if (!class_name_matches( class, name )) continue;
-#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) */
-        ERR( "WWS11 find_class: matched %s instance %p\n", debugstr_w((WCHAR *)class->shared->shm.class.name), instance );
-#endif
         is_win16 = !(class_instance >> 16);
         if (!instance || !is_local_class( class ) || class_instance == instance ||
             (!is_win16 && ((class_instance & ~0xffff) == (instance & ~0xffff))))
@@ -586,19 +583,6 @@ static CLASS *find_class( HINSTANCE module, UNICODE_STRING *name )
         }
     }
     user_unlock();
-#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) — the class_list's names at the miss */
-    {
-        CLASS *c;
-        unsigned n = 0;
-        LIST_FOR_EACH_ENTRY( c, &class_list, CLASS, entry )
-        {
-            if (++n > 24) break;
-            ERR( "WWS11 find_class miss: name %s len %d vs requested %s len %d\n",
-                 debugstr_w( (WCHAR *)c->shared->shm.class.name ), (int)c->shared->shm.class.name_len,
-                 debugstr_us( name ), (int)name->Length );
-        }
-    }
-#endif
     return NULL;
 }
 
@@ -846,10 +830,6 @@ ULONG WINAPI NtUserGetAtomName( ATOM atom, UNICODE_STRING *name )
             {
                 size = wine_server_reply_size( reply );
                 buffer[size / sizeof(WCHAR)] = 0;
-#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) — the atom-name reply */
-                if (req->atom == 0x8002)
-                    ERR( "WWS11 atomname: atom %04x reply size %d name %s\n", req->atom, (int)size, debugstr_w( buffer ) );
-#endif
             }
         }
         SERVER_END_REQ;
@@ -1155,10 +1135,6 @@ static void register_builtins(void)
     if (sizeof(void *) == 4 || NtCurrentTeb()->WowTebOffset) edit_class->extra = 6;
 
     for (i = 0; i < ARRAY_SIZE(builtin_classes); i++) if (builtin_classes[i].name) register_builtin( i );
-#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) — the builtin classes' registration outcome */
-    for (i = 0; i < ARRAY_SIZE(builtin_classes); i++) if (builtin_classes[i].name)
-        ERR( "WWS11 builtin class %s atom %04x\n", builtin_classes[i].name, builtin_classes[i].atom );
-#endif
     KeUserModeCallback( NtUserInitBuiltinClasses, NULL, 0, &ret_ptr, &ret_len );
 }
 

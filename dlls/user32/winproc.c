@@ -937,9 +937,6 @@ INT_PTR WINPROC_CallDlgProcW( HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam 
     if (!proc) return 0;
     if (!(func = NtUserGetDialogProc( proc, FALSE )) &&
         !(func = NtUserGetDialogProc( proc, TRUE ))) return 0;
-#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) — the dlgproc's dispatch route */
-    ERR( "WWS11 calldlgproc: hwnd %p msg %u proc %p func %p\n", hwnd, msg, (void *)proc, (void *)func );
-#endif
 
     if (func == WINPROC_PROC16)
     {
