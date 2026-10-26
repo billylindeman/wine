@@ -678,6 +678,9 @@ static HWND DIALOG_CreateIndirect( HINSTANCE hInst, LPCVOID dlgTemplate,
 
     if (dlgProc && dlgInfo->hUserFont)
         SendMessageW( hwnd, WM_SETFONT, (WPARAM)dlgInfo->hUserFont, 0 );
+#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) — the dlgproc attachment */
+    ERR( "WWS11 dlgproc: hwnd %p dlgProc %p\n", hwnd, (void *)(UINT_PTR)dlgProc );
+#endif
 
     /* Create controls */
 
