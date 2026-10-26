@@ -64,7 +64,17 @@ static inline GDI_HANDLE_ENTRY *handle_entry( HGDIOBJ handle )
         if (!HIWORD( handle ) || HIWORD( handle ) == gdi_shared->Handles[idx].Unique)
             return &gdi_shared->Handles[idx];
     }
-    if (handle) WARN( "invalid handle %p\n", handle );
+    if (handle)
+    {
+        WARN( "invalid handle %p\n", handle );
+#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) — the invalid handle the dialog's NC paint feeds */
+        {
+            volatile HGDIOBJ v = handle;
+            ERR( "WWS11 invalid handle: low %04x high %04x\n", (unsigned)(ULONG_PTR)v & 0xffff,
+                 (unsigned)((ULONG_PTR)v >> 16) & 0xffff );
+        }
+#endif
+    }
     return NULL;
 }
 
@@ -589,6 +599,13 @@ static void init_gdi_shared(void)
 HGDIOBJ WINAPI GetStockObject( INT obj )
 {
     assert( obj >= 0 && obj <= STOCK_LAST + 1 && obj != 9 );
+#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) — the out-of-range stock obj the dialog's NC paint feeds; the volatile keeps the assert's assumption from folding the check away */
+    {
+        volatile INT vobj = obj;
+        if (vobj < 0 || vobj > STOCK_LAST + 1 || vobj == 9)
+            ERR( "WWS11 stock: obj %d\n", vobj );
+    }
+#endif
 
     switch (obj)
     {
@@ -664,6 +681,9 @@ static void init_stock_objects( unsigned int dpi )
         GDI_HANDLE_ENTRY *entry = &gdi_shared->Handles[FIRST_GDI_HANDLE + i];
         entry_obj( entry )->system = TRUE;
         entry->StockFlag = 1;
+#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) — the stock slots' creation state */
+        if (!entry->Type) ERR( "WWS11 stockslot: slot %d type 0 (never created)\n", i );
+#endif
     }
 }
 
@@ -735,6 +755,14 @@ HGDIOBJ alloc_gdi_handle( struct gdi_obj_header *obj, DWORD type, const struct g
         if (TRACE_ON(gdi)) dump_gdi_objects();
         return 0;
     }
+#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) — a stock slot handed out by the allocator */
+    {
+        unsigned int idx_ = entry - gdi_shared->Handles;
+        if (idx_ < FIRST_GDI_HANDLE + 25)
+            ERR( "WWS11 alloc: stock slot %u handed out (next_free %p next_unused %p)\n",
+                 idx_, (void *)next_free, (void *)next_unused );
+    }
+#endif
     obj->funcs    = funcs;
     obj->selcount = 0;
     obj->system   = 0;

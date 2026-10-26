@@ -278,6 +278,13 @@ static BOOL DIALOG_CreateControls32( HWND hwnd, LPCSTR template, const DLG_TEMPL
         {
             WARN("control %s %s creation failed\n", debugstr_w(info.className),
                  debugstr_w(info.windowName));
+#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) — which control and why */
+            ERR( "WWS11 ctrl: %s %s id %d create FAILED lasterr %lu px %d,%d %dx%d\n",
+                 debugstr_w( info.className ), debugstr_w( info.windowName ), (int)info.id,
+                 (unsigned long)GetLastError(),
+                 MulDiv(info.x, dlgInfo->xBaseUnit, 4), MulDiv(info.y, dlgInfo->yBaseUnit, 8),
+                 MulDiv(info.cx, dlgInfo->xBaseUnit, 4), MulDiv(info.cy, dlgInfo->yBaseUnit, 8) );
+#endif
             if (dlgTemplate->style & DS_NOFAILCREATE) continue;
             SetLastError(0);
             return FALSE;
@@ -462,6 +469,12 @@ static HWND DIALOG_CreateIndirect( HINSTANCE hInst, LPCVOID dlgTemplate,
 
     if (!dlgTemplate) return 0;
     dlgTemplate = DIALOG_ParseTemplate32( dlgTemplate, &template );
+#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) — the parse the fallback template must satisfy */
+    ERR( "WWS11 createindirect: dialogEx %d style %08x exstyle %08x items %d rect %d,%d %dx%d class %s caption %s\n",
+         template.dialogEx, (unsigned)template.style, (unsigned)template.exStyle,
+         template.nbItems, template.x, template.y, template.cx, template.cy,
+         debugstr_w( template.className ), debugstr_w( template.caption ) );
+#endif
 
       /* Load menu */
 
@@ -638,6 +651,9 @@ static HWND DIALOG_CreateIndirect( HINSTANCE hInst, LPCVOID dlgTemplate,
 
     if (!hwnd)
     {
+#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) */
+        ERR( "WWS11 createindirect: the dialog window create FAILED lasterr %lu\n", (unsigned long)GetLastError() );
+#endif
         if (hUserFont) DeleteObject( hUserFont );
         if (hMenu) NtUserDestroyMenu( hMenu );
         if (disabled_owner) NtUserEnableWindow( disabled_owner, TRUE );
@@ -708,6 +724,9 @@ static HWND DIALOG_CreateIndirect( HINSTANCE hInst, LPCVOID dlgTemplate,
         return hwnd;
     }
     if (disabled_owner) NtUserEnableWindow( disabled_owner, TRUE );
+#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) — the control tree's create failed */
+    ERR( "WWS11 createindirect: DIALOG_CreateControls32 FAILED — the dialog destroyed\n" );
+#endif
     if (IsWindow(hwnd)) NtUserDestroyWindow( hwnd );
     return 0;
 }
@@ -783,6 +802,9 @@ INT DIALOG_DoDialogBox( HWND hwnd, HWND owner )
     BOOL bFirstEmpty;
 
     if (!(dlgInfo = DIALOG_get_info( hwnd, FALSE ))) return -1;
+#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) */
+    ERR( "WWS11 dodialog: enter hwnd %p\n", hwnd );
+#endif
 
     bFirstEmpty = TRUE;
     if (!(dlgInfo->flags & DF_END)) /* was EndDialog called in WM_INITDIALOG ? */
@@ -828,6 +850,9 @@ INT DIALOG_DoDialogBox( HWND hwnd, HWND owner )
         }
     }
     retval = dlgInfo->idResult;
+#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) */
+    ERR( "WWS11 dodialog: exit hwnd %p retval %ld\n", hwnd, (long)retval );
+#endif
     NtUserNotifyWinEvent( EVENT_SYSTEM_DIALOGEND, hwnd, OBJID_WINDOW, 0 );
     NtUserDestroyWindow( hwnd );
     return retval;

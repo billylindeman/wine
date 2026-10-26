@@ -1033,9 +1033,89 @@ BOOL WINAPI ShellAboutW( HWND hWnd, LPCWSTR szApp, LPCWSTR szOtherStuff,
     info.hFont = CreateFontIndirectW( &logFont );
 
     bRet = DialogBoxParamW( shell32_hInstance, L"SHELL_ABOUT_MSGBOX", hWnd, AboutDlgProc, (LPARAM)&info );
-#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) */
-    ERR( "WWS11 dialogbox ret %ld (expect -1 pre-fix: the template load at dialog.c:868 fails)\n", (long)bRet );
+    if (bRet == -1)
+    {
+        /* wineweb: the resource path failed — the wasm builtin has no PE
+         * resource section (the S8 OBM_MNARROW precedent) and the boot
+         * never ran this builtin's process attach, so shell32_hInstance is
+         * 0 and the lookup cannot succeed (the S11 finding: FindResourceW
+         * fails at user32 dialog.c:868, DialogBoxParamW returns -1, and the
+         * About box never renders). Embed the .rc's own dialog verbatim
+         * (shell32.rc:318-331 — SHELL_ABOUT_MSGBOX, its 8 controls, and the
+         * wrc keyword expansions from parser.y ins_ctrl: WS_CHILD|WS_VISIBLE
+         * base, WS_TABSTOP for the buttons, SS_LEFT|WS_GROUP for LTEXT,
+         * SS_ICON forced for ICON) and run it through
+         * DialogBoxIndirectParamW. Wine's resource path stays first. */
+        static WORD template_buf[512] __attribute__((aligned(4)));
+        unsigned w = 0;
+        const DWORD style = DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION |
+                            WS_SYSMENU | DS_SETFONT; /* the .rc STYLE + the FONT statement */
+        const unsigned n_items = 8;
+
+        /* The template header: style, exstyle, item count, rect, no menu,
+         * the default dialog class, the caption, the font block (a plain
+         * DIALOG carries point size + face name only — no weight/italic,
+         * user32 dialog.c:397-428 reads exactly that). */
+        template_buf[w++] = LOWORD( style );  template_buf[w++] = HIWORD( style );
+        template_buf[w++] = 0;                template_buf[w++] = 0; /* exstyle */
+        template_buf[w++] = n_items;
+        template_buf[w++] = 15;  template_buf[w++] = 40;  /* the .rc DIALOG pos */
+        template_buf[w++] = 225; template_buf[w++] = 152; /* the .rc DIALOG size */
+        template_buf[w++] = 0;   /* no menu */
+        template_buf[w++] = 0;   /* the default dialog class */
+        template_buf[w++] = 'A'; template_buf[w++] = 'b'; template_buf[w++] = 'o';
+        template_buf[w++] = 'u'; template_buf[w++] = 't'; template_buf[w++] = ' ';
+        template_buf[w++] = '%'; template_buf[w++] = 's'; template_buf[w++] = 0;
+        template_buf[w++] = 10;  /* the .rc FONT 10 */
+        template_buf[w++] = 'M'; template_buf[w++] = 'S'; template_buf[w++] = ' ';
+        template_buf[w++] = 'S'; template_buf[w++] = 'h'; template_buf[w++] = 'e';
+        template_buf[w++] = 'l'; template_buf[w++] = 'l'; template_buf[w++] = ' ';
+        template_buf[w++] = 'D'; template_buf[w++] = 'l'; template_buf[w++] = 'g';
+        template_buf[w++] = 0;
+        w = (w + 1) & ~1u; /* the first control is dword-aligned (dialog.c:431) */
+
+        /* Each control: style, exstyle, rect, id, the builtin class atom,
+         * the title, no extra data — dword-aligned after each. */
+#define ABOUT_ITEM( style_, x_, y_, cx_, cy_, id_, atom_, title_ )                    \
+        do {                                                                          \
+            template_buf[w++] = LOWORD( (DWORD)(style_) );                            \
+            template_buf[w++] = HIWORD( (DWORD)(style_) );                            \
+            template_buf[w++] = 0; template_buf[w++] = 0; /* exstyle */               \
+            template_buf[w++] = (x_); template_buf[w++] = (y_);                       \
+            template_buf[w++] = (cx_); template_buf[w++] = (cy_);                     \
+            template_buf[w++] = (id_);                                                \
+            template_buf[w++] = 0xffff; template_buf[w++] = (atom_);                  \
+            { static const WCHAR t_[] = title_;                                       \
+              unsigned i_; for (i_ = 0; i_ <= ARRAY_SIZE(t_) - 1; i_++)               \
+                  template_buf[w++] = t_[i_]; }                                       \
+            template_buf[w++] = 0; /* no extra data */                                 \
+            w = (w + 1) & ~1u;                                                         \
+        } while (0)
+
+        ABOUT_ITEM( WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
+                    153, 133, 65, 14, IDOK, 0x0080, L"OK" );
+        ABOUT_ITEM( WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+                    153, 113, 65, 14, IDC_ABOUT_LICENSE, 0x0080, L"Wine &license" );
+        ABOUT_ITEM( WS_CHILD | WS_VISIBLE | LBS_NOTIFY | WS_VSCROLL | WS_BORDER,
+                    8, 65, 137, 82, IDC_ABOUT_LISTBOX, 0x0083, L"" );
+        ABOUT_ITEM( WS_CHILD | WS_VISIBLE | SS_ICON,
+                    10, 10, 30, 30, stc1, 0x0082, L"" );
+        ABOUT_ITEM( WS_CHILD | WS_VISIBLE | SS_LEFT | WS_GROUP,
+                    42, 10, 180, 10, IDC_ABOUT_STATIC_TEXT1, 0x0082, L"" );
+        ABOUT_ITEM( WS_CHILD | WS_VISIBLE | SS_LEFT | WS_GROUP,
+                    42, 22, 180, 10, IDC_ABOUT_STATIC_TEXT2, 0x0082, L"" );
+        ABOUT_ITEM( WS_CHILD | WS_VISIBLE | SS_LEFT | WS_GROUP,
+                    42, 34, 180, 10, IDC_ABOUT_STATIC_TEXT3, 0x0082, L"Running on %s" );
+        ABOUT_ITEM( WS_CHILD | WS_VISIBLE | SS_LEFT | WS_GROUP,
+                    8, 54, 214, 10, IDC_ABOUT_WINE_TEXT, 0x0082, L"Wine was brought to you by:" );
+#undef ABOUT_ITEM
+
+        bRet = DialogBoxIndirectParamW( shell32_hInstance, (LPCDLGTEMPLATEW)template_buf,
+                                        hWnd, AboutDlgProc, (LPARAM)&info );
+#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) — the fallback's outcome */
+        ERR( "WWS11 fallback: DialogBoxIndirectParamW ret %ld\n", (long)bRet );
 #endif
+    }
     DeleteObject(info.hFont);
     return bRet;
 }

@@ -63,7 +63,7 @@ static void drv_log(const char *msg)
  * host state — this is the guest side's own bookkeeping, host state lives
  * in the wineweb-drv crate).
  */
-#define DRV_MAX_WINDOWS 16
+#define DRV_MAX_WINDOWS 32 /* the dialog's 8 controls + the popups ride the demo's census (S11) */
 
 struct drv_window
 {

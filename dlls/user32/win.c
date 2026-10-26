@@ -395,6 +395,11 @@ HWND WIN_CreateWindowEx( CREATESTRUCTW *cs, LPCWSTR className, HINSTANCE module,
     hwnd = NtUserCreateWindowEx( cs->dwExStyle, &class, NULL, &window_name, cs->style,
                                  cs->x, cs->y, cs->cx, cs->cy, cs->hwndParent, menu, module,
                                  cs->lpCreateParams, 0, cs->hInstance, className, !unicode );
+#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) — the child create's failure point */
+    if (!hwnd && cs->hwndParent && (UINT_PTR)cs->hMenu == 100)
+        ERR( "WWS11 winex: NtUserCreateWindowEx FAILED for the id-100 child lasterr %lu parent %p style %08lx exstyle %08lx\n",
+             (unsigned long)GetLastError(), cs->hwndParent, cs->style, cs->dwExStyle );
+#endif
     if (!hwnd && menu && menu != cs->hMenu) NtUserDestroyMenu( menu );
     if (!unicode && window_name.Buffer != name_buf) RtlFreeUnicodeString( &window_name );
     return hwnd;
