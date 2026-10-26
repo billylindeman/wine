@@ -20,9 +20,6 @@
 
 #include "user_private.h"
 #include "controls.h"
-#include "wine/debug.h"
-
-WINE_DEFAULT_DEBUG_CHANNEL(dialog);
 
 
 /***********************************************************************
@@ -378,10 +375,6 @@ static LRESULT USER_DefDlgProcW( HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
     /* Perform DIALOGINFO initialization if not done */
     if(!(dlgInfo = DIALOG_get_info( hwnd, TRUE ))) return 0;
 
-#ifdef __wasm__ /* wineweb: S12 probe (stripped post-block) — is DefDlgProc reached with WM_INITDIALOG */
-    if (msg == WM_INITDIALOG)
-        ERR( "WWS12 defdlgproc: hwnd %p WM_INITDIALOG\n", hwnd );
-#endif
     SetWindowLongPtrW( hwnd, DWLP_MSGRESULT, 0 );
     result = WINPROC_CallDlgProcW( hwnd, msg, wParam, lParam );
 

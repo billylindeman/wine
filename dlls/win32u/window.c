@@ -1293,26 +1293,6 @@ static LONG_PTR get_window_long_shm( HWND hwnd, UINT offset, UINT size, BOOL ans
         }
         window_ansi = window_shm->ansi;
     }
-#ifdef __wasm__ /* wineweb: S12 probe — the attach facts, dumped ONCE per run
-                 * (the store count varies per call — a per-call line is a new
-                 * shape per message and floods the diag ring) */
-    if (offset == DWLP_DLGPROC)
-    {
-        extern unsigned s12_attach[24];
-        static int s12_read_dumped;
-        if (!s12_read_dumped)
-        {
-            s12_read_dumped = 1;
-            ERR( "WWS12 dlgproc read: hwnd %p read %p n %u a0 %p/%p v%u o%p a1 %p/%p v%u o%p a2 %p/%p v%u o%p a3 %p/%p v%u o%p setdlginfo %u info %p\n",
-                 (void *)(UINT_PTR)hwnd, (void *)(UINT_PTR)ret, s12_attach[16],
-                 (void *)(UINT_PTR)s12_attach[0], (void *)(UINT_PTR)s12_attach[1], s12_attach[2], (void *)(UINT_PTR)s12_attach[3],
-                 (void *)(UINT_PTR)s12_attach[4], (void *)(UINT_PTR)s12_attach[5], s12_attach[6], (void *)(UINT_PTR)s12_attach[7],
-                 (void *)(UINT_PTR)s12_attach[8], (void *)(UINT_PTR)s12_attach[9], s12_attach[10], (void *)(UINT_PTR)s12_attach[11],
-                 (void *)(UINT_PTR)s12_attach[12], (void *)(UINT_PTR)s12_attach[13], s12_attach[14], (void *)(UINT_PTR)s12_attach[15],
-                 s12_attach[17], (void *)(UINT_PTR)s12_attach[18] );
-        }
-    }
-#endif
     if (status)
     {
         RtlSetLastWin32Error( ERROR_INVALID_WINDOW_HANDLE );
@@ -1465,15 +1445,6 @@ static BOOL server_set_window_info( HWND hwnd, INT offset, LONG_PTR newval, UINT
         ret = !wine_server_call_err( req );
         *oldval = reply->old_info;
         *ansi = reply->old_ansi;
-#ifdef __wasm__ /* wineweb: S12 probe — the server's verdict on the dlgproc store, stashed */
-        if (offset == DWLP_DLGPROC)
-        {
-            extern unsigned s12_attach[24];
-            unsigned slot = ((s12_attach[16] - 1) & 3u) * 4;
-            s12_attach[slot + 2] = ret;
-            s12_attach[slot + 3] = (unsigned)(UINT_PTR)reply->old_info;
-        }
-#endif
     }
     SERVER_END_REQ;
     return ret;
@@ -1597,15 +1568,6 @@ static LONG_PTR set_window_long_internal( HWND hwnd, INT offset, UINT size,
         RtlSetLastWin32Error( ERROR_ACCESS_DENIED );
         return 0;
     }
-#ifdef __wasm__ /* wineweb: S12 probe — the dlgproc store attempt, stashed */
-    if (offset == DWLP_DLGPROC)
-    {
-        extern unsigned s12_attach[24];
-        unsigned slot = (s12_attach[16]++ & 3u) * 4;
-        s12_attach[slot] = (unsigned)(UINT_PTR)hwnd;
-        s12_attach[slot + 1] = (unsigned)(UINT_PTR)newval;
-    }
-#endif
     if (win == WND_OTHER_PROCESS)
     {
         if (offset == GWLP_WNDPROC)
@@ -5764,6 +5726,8 @@ static WND *create_window_handle( HWND parent, HWND owner, UNICODE_STRING *name,
     struct tagCLASS *class = NULL;
     WND *win;
 
+    ERR( "W6: create_window_handle parent %p name %s\n", parent, debugstr_us(name) );
+
     if (NTUSER_DPI_CONTEXT_IS_MONITOR_AWARE( dpi_context ) && dpi_context != NTUSER_DPI_PER_MONITOR_AWARE)
     {
         FIXME( "DPI context %#x not implemented\n", dpi_context );
@@ -5946,6 +5910,9 @@ HWND WINAPI NtUserCreateWindowEx( DWORD ex_style, UNICODE_STRING *class_name,
     RECT surface_rect;
     UINT context;
     WND *win;
+
+    ERR( "W6: NtUserCreateWindowEx enter class %s style %#x parent %p\n",
+         debugstr_us(class_name), style, parent );
 
     TRACE( "ex_style %#x, class_name %s, version %s, window_name %s, style %#x, x %u, y %u, cx %u, cy %u, "
            "parent %p, menu %p, class_instance %p, params %p, flags %#x, instance %p, class %s, ansi %u\n",
@@ -6289,13 +6256,6 @@ static BOOL set_dialog_info( HWND hwnd, void *info )
 
     if (!(win = get_win_ptr( hwnd )) || win == WND_OTHER_PROCESS || win == WND_DESKTOP) return FALSE;
     win->dlgInfo = info;
-#ifdef __wasm__ /* wineweb: S12 probe — stashed, dumped from the WM_INITDIALOG handler */
-    {
-        extern unsigned s12_attach[24];
-        s12_attach[17]++;
-        s12_attach[18] = (unsigned)(UINT_PTR)info;
-    }
-#endif
     release_win_ptr( win );
     return TRUE;
 }

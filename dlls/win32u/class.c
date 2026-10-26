@@ -168,17 +168,6 @@ typedef struct tagWINDOWPROC
     WNDPROC  procW;    /* Unicode window proc */
 } WINDOWPROC;
 
-#ifdef __wasm__
-/* wineweb: S12 probe (stripped post-block) — the dlgproc attach facts,
- * stashed at the create path and dumped from the WM_INITDIALOG handler:
- * the create-path diag lines are lost under the create's allocation
- * churn (the dispatch path delivers reliably). A 4-entry ring of the
- * DWLP_DLGPROC store attempts: hwnd, value, verdict, old. [16] counts
- * set_dialog_info calls, [17] the stored DIALOGINFO. */
-unsigned s12_attach[24];
-#define S12_RING 4
-#endif
-
 static WINDOWPROC winproc_array[MAX_WINPROCS];
 static UINT winproc_used = NTUSER_NB_PROCS;
 static pthread_mutex_t winproc_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -778,6 +767,7 @@ ATOM WINAPI NtUserGetClassInfoEx( HINSTANCE instance, UNICODE_STRING *name, WNDC
     CLASS *class;
     ATOM atom = 0;
 
+    ERR( "W6: NtUserGetClassInfoEx %s instance %p\n", debugstr_us(name), instance );
     /* create the desktop window to trigger builtin class registration */
     if (!is_desktop_class( name ) && !is_message_class( name )) get_desktop_window();
 

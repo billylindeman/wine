@@ -458,10 +458,6 @@ static HWND DIALOG_CreateIndirect( HINSTANCE hInst, LPCVOID dlgTemplate,
     UINT xBaseUnit = LOWORD(units);
     UINT yBaseUnit = HIWORD(units);
 
-#ifdef __wasm__ /* wineweb: S12 probe (stripped post-block) — how many dialogs get created */
-    ERR( "WWS12 createindirect enter: dlgproc %p\n", (void *)(UINT_PTR)dlgProc );
-#endif
-
       /* Parse dialog template */
 
     if (!dlgTemplate) return 0;
@@ -652,9 +648,6 @@ static HWND DIALOG_CreateIndirect( HINSTANCE hInst, LPCVOID dlgTemplate,
     will be valid only after WM_CREATE message has been handled in DefDlgProc
     All the members of the structure get filled here using temp variables */
     dlgInfo = DIALOG_get_info( hwnd, TRUE );
-#ifdef __wasm__ /* wineweb: S12 probe (stripped post-block) — the DIALOGINFO the attach rides */
-    ERR( "WWS12 dlginfo: hwnd %p dlgInfo %p\n", hwnd, dlgInfo );
-#endif
     dlgInfo->hwndFocus   = 0;
     dlgInfo->hUserFont   = hUserFont;
     dlgInfo->hMenu       = hMenu;
@@ -682,10 +675,6 @@ static HWND DIALOG_CreateIndirect( HINSTANCE hInst, LPCVOID dlgTemplate,
         {
             HWND focus = GetNextDlgTabItem( hwnd, 0, FALSE );
             if (!focus) focus = GetNextDlgGroupItem( hwnd, 0, FALSE );
-#ifdef __wasm__ /* wineweb: S12 probe (stripped post-block) — the WM_INITDIALOG send is reached */
-            ERR( "WWS12 initdialog send: hwnd %p dlgproc %p focus %p\n",
-                 hwnd, (void *)(UINT_PTR)dlgProc, (void *)(UINT_PTR)focus );
-#endif
             if (SendMessageW( hwnd, WM_INITDIALOG, (WPARAM)focus, param ) && IsWindow( hwnd ) &&
                 ((~template.style & DS_CONTROL) || (template.style & WS_VISIBLE)))
             {

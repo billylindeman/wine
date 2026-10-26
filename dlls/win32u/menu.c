@@ -1849,9 +1849,6 @@ found:
     if (msg == WM_COMMAND)
     {
         TRACE_(accel)( ", sending WM_COMMAND, wparam=%0x\n", 0x10000 | cmd );
-#ifdef __wasm__ /* wineweb: S12 probe (stripped post-block) — the item-execution census */
-        ERR( "WWS12 menu cmd: hwnd %p wparam %x\n", hwnd, 0x10000u | cmd );
-#endif
         send_message( hwnd, msg, 0x10000 | cmd, 0 );
     }
     else if (msg == WM_SYSCOMMAND)
@@ -3530,12 +3527,7 @@ static INT exec_focused_item( MTRACKER *pmt, HMENU handle, UINT flags )
                 NtUserPostMessage( pmt->hOwnerWnd, WM_MENUCOMMAND, menu->FocusedItem,
                                    (LPARAM)handle);
             else
-            {
-#ifdef __wasm__ /* wineweb: S12 probe (stripped post-block) — the About WM_COMMAND post census */
-                ERR( "WWS12 menu post: owner %p id %x\n", pmt->hOwnerWnd, item->wID );
-#endif
                 NtUserPostMessage( pmt->hOwnerWnd, WM_COMMAND, item->wID, 0 );
-            }
         }
     }
 

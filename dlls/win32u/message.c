@@ -457,13 +457,6 @@ static BOOL init_window_call_params( struct win_proc_params *params, HWND hwnd, 
     params->mapping = mapping;
     params->dpi_context = get_window_dpi_awareness_context( params->hwnd );
     get_winproc_params( params, !is_dialog );
-#ifdef __wasm__ /* wineweb: S12 probe (stripped post-block) — the WM_INITDIALOG dispatch's resolved params */
-    if (msg == WM_INITDIALOG)
-        ERR( "WWS12 callparams: hwnd %p func %p procA %p procW %p ansi %u ansi_dst %u is_dialog %u\n",
-             (void *)(UINT_PTR)params->hwnd, (void *)(UINT_PTR)params->func,
-             (void *)(UINT_PTR)params->procA, (void *)(UINT_PTR)params->procW,
-             params->ansi, params->ansi_dst, is_dialog );
-#endif
     return TRUE;
 }
 
