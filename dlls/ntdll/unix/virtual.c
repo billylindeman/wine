@@ -3187,6 +3187,58 @@ static unsigned int virtual_map_section( HANDLE handle, PVOID *addr_ptr, ULONG_P
     vprot |= sec_flags;
     if (!(sec_flags & SEC_RESERVE)) vprot |= VPROT_COMMITTED;
 
+#ifdef __wasm__
+    /* wasm builtin: a pagefile-backed section (SEC_COMMIT, file NULL, offset
+     * 0) has no unix fd — the server-fd route can never work here
+     * (server_get_unix_fd would recvmsg a socket that does not exist; the
+     * negative-fd cache returns the stored error, not a usable fd). This is
+     * the virtual_init_user_shared_data shape (above): wine's own map_view
+     * does the VM bookkeeping, the view is committed through the shim mmap,
+     * and the map_view server request still does the server-side record.
+     * File-backed sections keep the untouched path below — their fd-backed
+     * shapes stay refused on this runtime (the miniserver's named refusal
+     * answers create_mapping for them). */
+    if ( (sec_flags & SEC_COMMIT) && !(sec_flags & SEC_FILE) && !offset.QuadPart )
+    {
+        server_enter_uninterrupted_section( &virtual_mutex, &sigset );
+
+        res = map_view( &view, base, size, alloc_type, vprot, limit_low, limit_high, 0 );
+        if (!res)
+        {
+            TRACE( "handle=%p size=%lx (wasm pagefile section)\n", handle, size );
+            if (mmap( view->base, size, PROT_READ | PROT_WRITE,
+                      MAP_FIXED | MAP_PRIVATE | MAP_ANON, -1, 0 ) == MAP_FAILED)
+            {
+                ERR( "failed to commit the pagefile view %p %lx\n", view->base, size );
+                res = STATUS_NO_MEMORY;
+            }
+        }
+        if (!res)
+        {
+            SERVER_START_REQ( map_view )
+            {
+                req->mapping = wine_server_obj_handle( handle );
+                req->access  = access;
+                req->base    = wine_server_client_ptr( view->base );
+                req->size    = size;
+                req->start   = 0;
+                res = wine_server_call( req );
+            }
+            SERVER_END_REQ;
+        }
+        if (NT_SUCCESS(res))
+        {
+            *addr_ptr = view->base;
+            *size_ptr = size;
+            VIRTUAL_DEBUG_DUMP_VIEW( view );
+        }
+        else delete_view( view );
+
+        server_leave_uninterrupted_section( &virtual_mutex, &sigset );
+        return res;
+    }
+#endif
+
     if ((res = server_get_unix_fd( handle, 0, &unix_handle, &needs_close, NULL, NULL ))) return res;
 
     server_enter_uninterrupted_section( &virtual_mutex, &sigset );
