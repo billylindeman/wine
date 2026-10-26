@@ -268,10 +268,8 @@ HWND WIN_CreateWindowEx( CREATESTRUCTW *cs, LPCWSTR className, HINSTANCE module,
     WCHAR name_buf[8];
     HMENU menu;
 
-    ERR( "W6: WIN_CreateWindowEx enter class %s\n", debugstr_w(className) );
     init_class_name( &class, className );
     get_class_version( &class, &version, TRUE );
-    ERR( "W6: after get_class_version class=%s version=%s\n", debugstr_us(&class), debugstr_us(&version) );
 
     if (!NtUserGetClassInfoEx( module, &class, &info, &menu_name, FALSE ))
     {
@@ -280,7 +278,6 @@ HWND WIN_CreateWindowEx( CREATESTRUCTW *cs, LPCWSTR className, HINSTANCE module,
         SetLastError( ERROR_CLASS_DOES_NOT_EXIST );
         return FALSE;
     }
-    ERR( "W6: NtUserGetClassInfoEx ok\n" );
 
     TRACE("%s %s%s%s ex=%08lx style=%08lx %d,%d %dx%d parent=%p menu=%p inst=%p params=%p\n",
           unicode ? debugstr_w(cs->lpszName) : debugstr_a((LPCSTR)cs->lpszName),
@@ -461,9 +458,6 @@ HWND WINAPI DECLSPEC_HOTPATCH CreateWindowExW( DWORD exStyle, LPCWSTR className,
     cs.lpszName       = windowName;
     cs.lpszClass      = className;
     cs.dwExStyle      = exStyle;
-
-    ERR( "W6: CreateWindowExW enter class %s wow.create_window %p\n",
-         debugstr_w(className), (void *)wow_handlers.create_window );
 
     return wow_handlers.create_window( &cs, className, instance, TRUE );
 }

@@ -878,6 +878,10 @@ LRESULT WINAPI DECLSPEC_HOTPATCH DispatchMessageA( const MSG* msg )
 LRESULT WINAPI DECLSPEC_HOTPATCH DispatchMessageW( const MSG* msg )
 {
     LRESULT retval;
+#ifdef __wasm__ /* wineweb: S12 probe (stripped post-block) — the WM_COMMAND dispatch census */
+    if (msg->message == WM_COMMAND)
+        ERR( "WWS12 dispatch cmd: hwnd %p wp %x\n", (void *)(UINT_PTR)msg->hwnd, (unsigned)msg->wParam );
+#endif
 
       /* Process timer messages */
     if ((msg->message == WM_TIMER) || (msg->message == WM_SYSTIMER))

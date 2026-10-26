@@ -934,9 +934,17 @@ INT_PTR WINPROC_CallDlgProcW( HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam 
 #else
     proc = (DLGPROC)NtUserGetWindowLongW( hwnd, DWLP_DLGPROC );
 #endif
+#ifdef __wasm__ /* wineweb: S12 probe (stripped post-block) — the dlgproc read itself */
+    if (msg == WM_INITDIALOG)
+        ERR( "WWS12 calldlgproc read: hwnd %p proc %p\n", hwnd, (void *)proc );
+#endif
     if (!proc) return 0;
     if (!(func = NtUserGetDialogProc( proc, FALSE )) &&
         !(func = NtUserGetDialogProc( proc, TRUE ))) return 0;
+#ifdef __wasm__ /* wineweb: S12 probe (stripped post-block) — the dlgproc identity through the dispatch */
+    if (msg == WM_INITDIALOG)
+        ERR( "WWS12 calldlgproc: hwnd %p proc %p func %p\n", hwnd, (void *)proc, (void *)func );
+#endif
 
     if (func == WINPROC_PROC16)
     {
