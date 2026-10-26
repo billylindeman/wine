@@ -865,7 +865,14 @@ INT_PTR WINAPI DialogBoxParamW( HINSTANCE hInst, LPCWSTR name,
 
     if (owner && !IsWindow(owner)) return 0;
 
-    if (!(hrsrc = FindResourceW( hInst, name, (LPWSTR)RT_DIALOG ))) return -1;
+    if (!(hrsrc = FindResourceW( hInst, name, (LPWSTR)RT_DIALOG )))
+    {
+#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) — the first failing hop named */
+        ERR( "WWS11 dialog: FindResourceW(%p, %s, RT_DIALOG) failed — no resource section\n",
+             hInst, debugstr_w(name) );
+#endif
+        return -1;
+    }
     if (!(ptr = LoadResource(hInst, hrsrc))) return -1;
     if (!(hwnd = DIALOG_CreateIndirect( hInst, ptr, owner, dlgProc, param, TRUE, &owner ))) return -1;
     return DIALOG_DoDialogBox( hwnd, owner );

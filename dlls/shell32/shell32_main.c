@@ -1021,10 +1021,21 @@ BOOL WINAPI ShellAboutW( HWND hWnd, LPCWSTR szApp, LPCWSTR szOtherStuff,
     info.szOtherStuff = szOtherStuff;
     info.hIcon        = hIcon;
 
-    SystemParametersInfoW( SPI_GETICONTITLELOGFONT, 0, &logFont, 0 );
+    memset( &logFont, 0xaa, sizeof(logFont) ); /* wineweb: S11 probe — the S8 uninitialized-struct class if SPI leaves it */
+    {
+        BOOL spi_ret = SystemParametersInfoW( SPI_GETICONTITLELOGFONT, 0, &logFont, 0 );
+#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) */
+        ERR( "WWS11 shellabout: hInst %p icon %p spi %d lfHeight %d lfWidth %d face %s\n",
+             shell32_hInstance, hIcon, spi_ret, logFont.lfHeight, logFont.lfWidth,
+             spi_ret ? debugstr_w(logFont.lfFaceName) : "(spi failed)" );
+#endif
+    }
     info.hFont = CreateFontIndirectW( &logFont );
 
     bRet = DialogBoxParamW( shell32_hInstance, L"SHELL_ABOUT_MSGBOX", hWnd, AboutDlgProc, (LPARAM)&info );
+#ifdef __wasm__ /* wineweb: S11 probe (stripped post-block) */
+    ERR( "WWS11 dialogbox ret %ld (expect -1 pre-fix: the template load at dialog.c:868 fails)\n", (long)bRet );
+#endif
     DeleteObject(info.hFont);
     return bRet;
 }
