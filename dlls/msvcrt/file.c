@@ -1,4 +1,37 @@
 #ifdef __wasm__ /* wineweb: the FILE-backed stdio surface (printf/fprintf/fwrite family) drags the Wine heap boot into every harness; the guest-facing vsprintf/_vsnprintf (wcs.c) stay. Console/terminal stdio is P3+ — reaching one of these exports is a loud seam, not silent misbehavior. */
+/* wineweb (F3d): the CRT's std::ios_base::Init::Init() static constructor
+ * calls __p__iob() (the mingw __acrt_iob_func hop) BEFORE main,
+ * unconditionally — even in a PE that never writes stdio (dxvk's _WIN32
+ * build logs via __wine_dbg_output). The streams need to CONSTRUCT, not to
+ * work: __iob_func hands back a static zeroed FILE[3] (the stdin/stdout/
+ * stderr slots the iostream init indexes), whose pointer is stored and
+ * never dereferenced on this runtime. Every stdio WRITE stays unbacked —
+ * the rest of this file's family remains registered-loud (the gen-spec
+ * LOUD_ONLY set), so reaching one is still the loud seam above.
+ *
+ * The struct is wine's own _iobuf shape (msvcrt.h) verbatim so the array
+ * has the real FILE layout, not an invented one. Three entries, not
+ * _IOB_ENTRIES: this arm exists for the iostream init's three standard
+ * streams; anything indexing deeper would be a stdio consumer this
+ * runtime has no backing for and belongs at the loud seam. */
+typedef struct _iobuf
+{
+  char* _ptr;
+  char* _base;
+  int   _cnt;
+  int   _flag;
+  int   _file;
+  int   _charbuf;
+  int   _bufsiz;
+  char* _tmpfname;
+} FILE;
+
+static FILE MSVCRT__iob[3] = { { 0 } };
+
+FILE * __iob_func(void)
+{
+    return MSVCRT__iob;
+}
 typedef int msvcrt_file_wasm_placeholder;
 #else
 /*
