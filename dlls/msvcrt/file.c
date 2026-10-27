@@ -32,6 +32,19 @@ FILE * __iob_func(void)
 {
     return MSVCRT__iob;
 }
+/* wineweb (fflush): the guest's exit(0) rides the atexit chain — the C++
+ * iostream static dtors flush std::cout/cerr — into fflush before
+ * ExitProcess. The honest shape: the streams this runtime hands out are
+ * the static zeroed FILE[3] above, whose buffers are never written (every
+ * stdio WRITE stays unbacked — the LOUD_ONLY seam). A flush of a
+ * never-written stdio is a no-op, so fflush returns success and flushes
+ * nothing — NULL flushes nothing too (no console semantics are claimed;
+ * the F3c §4 pattern: the guest needs the CALL to succeed, not the
+ * streams to work). */
+int __cdecl fflush(FILE *file)
+{
+    return 0;
+}
 typedef int msvcrt_file_wasm_placeholder;
 #else
 /*
