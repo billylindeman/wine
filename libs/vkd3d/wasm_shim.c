@@ -19,7 +19,9 @@
  *     the vkd3d debug/TRACE callers are flag-gated off on this runtime
  *     (VKD3D_DEBUG unset, served GetEnvironmentVariableA answers 0);
  *     the call succeeds and discards.
- *   - _fileno: the FILE's own _file (the sink slot, the file.c contract).
+ *   - _fileno: SUPERSEDED (ffileno) — the msvcrt file.c __wasm__ arm now
+ *     defines it (the same link resolves the vkd3d routes through it); the
+ *     shim's own copy was a duplicate strong symbol at the wasm-ld stage.
  *   - _fstat64i32: no file metadata exists on this runtime — zeroed buf,
  *     -1 (the callers check the rc; unreached without #include).
  *   - GetCurrentThreadId: the single guest thread's constant (the
@@ -89,11 +91,6 @@ int __cdecl __stdio_common_vsprintf(unsigned __int64 options, char *buffer,
     if (buffer && buffer_count)
         buffer[0] = 0; /* the wrappers' own termination contract sees "" */
     return 0;
-}
-
-int __cdecl _fileno(FILE *file)
-{
-    return file ? file->_file : -1;
 }
 
 int __cdecl _fstat64i32(int fd, void *buf)

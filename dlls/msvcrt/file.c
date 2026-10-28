@@ -181,6 +181,26 @@ int __cdecl fclose(FILE *file)
     MSVCRT_wasm_sinks[i].len = MSVCRT_wasm_sinks[i].cap = 0;
     return 0;
 }
+/* wineweb (ffileno): the guest's libstdc++ __basic_file<char>::fd() rides
+ * _fileno on the ofstream's own write path (xsputn_2's two-buffer route
+ * checks the fd — the FSbb walk's terminus: msvcrt p10:14, the return into
+ * fd() at 0x49380a). The honest answer is the FILE's slot: the sink-backed
+ * files carry their sink slot in _file (the fd3dc arm sets it at open —
+ * the slot index IS the fd); the three standard streams are the static
+ * _iob[3] above, whose array position IS the fd (0/1/2 — the CRT's own
+ * stdin/stdout/stderr numbering). NULL answers -1. No metadata semantics
+ * are claimed beyond the slot identity — the sinks have no host fd.
+ * This supersedes the vkd3d wasm_shim's _fileno arm (d6cd686): the shim
+ * exists for helpers the static wine archives do not define, and this
+ * archive now defines it — one definition serves the guest import and
+ * the vkd3d UCRT routes through the same link. */
+int __cdecl _fileno(FILE *file)
+{
+    if (!file) return -1;
+    if (file >= MSVCRT__iob && file < MSVCRT__iob + 3)
+        return (int)(file - MSVCRT__iob);
+    return file->_file;
+}
 /* wineweb (fd3dc): the read-side stdio the wine-internal consumers need
  * at the LINK (the d3dcompiler asmscanner — asmshader.yy.o — rides wine's
  * stdin/stderr macros and <stdio.h>'s fread/getc/clearerr/ferror, and its
