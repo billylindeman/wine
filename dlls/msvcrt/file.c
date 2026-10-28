@@ -151,6 +151,39 @@ int __cdecl fclose(FILE *file)
     MSVCRT_wasm_sinks[i].len = MSVCRT_wasm_sinks[i].cap = 0;
     return 0;
 }
+/* wineweb (fd3dc): the read-side stdio the wine-internal consumers need
+ * at the LINK (the d3dcompiler asmscanner — asmshader.yy.o — rides wine's
+ * stdin/stderr macros and <stdio.h>'s fread/getc/clearerr/ferror, and its
+ * errno hop lands on _errno). The sinks are write-only and the iob
+ * streams are never written, so: nothing is ever readable (fread
+ * answers 0 items, getc answers EOF), the error flags are always clear
+ * (ferror 0, clearerr a no-op), and _errno hands the single static —
+ * this runtime has one guest thread. None of these are in the p38
+ * allowlists: they satisfy wine's own archives, not guest imports. */
+static int MSVCRT_wasm_errno;
+int *__cdecl _errno(void)
+{
+    return &MSVCRT_wasm_errno;
+}
+void __cdecl clearerr(FILE *file)
+{
+    (void)file;
+}
+int __cdecl ferror(FILE *file)
+{
+    (void)file;
+    return 0;
+}
+int __cdecl getc(FILE *file)
+{
+    (void)file;
+    return -1; /* EOF */
+}
+size_t __cdecl fread(void *ptr, size_t size, size_t nitems, FILE *file)
+{
+    (void)ptr; (void)size; (void)nitems; (void)file;
+    return 0;
+}
 typedef int msvcrt_file_wasm_placeholder;
 #else
 /*
