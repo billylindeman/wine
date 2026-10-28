@@ -45,6 +45,112 @@ int __cdecl fflush(FILE *file)
 {
     return 0;
 }
+/* wineweb (fd3dc): the guest's Logger (dxvk's emitMsg, the d3d9
+ * bc-update-surface PE) opens "triangle.log" through std::ofstream —
+ * libstdc++'s __basic_file hops to fopen/fwrite/fclose — and writes a
+ * handful of diagnostic lines it never reads back (write-only, content
+ * unconsumed: the F3a pixel contracts are canvas readBacks, not the log).
+ * The census-decided minimal honest file semantics (the F4b record §5
+ * named this the next wall behind the D3DCOMPILER_47.dll load): the file
+ * exists as an in-memory sink — the guest has no host-FS write path on
+ * this runtime (real files are the VFS seam's surface) — and the calls
+ * behave: open/append/close succeed in order, the bytes are retained,
+ * fwrite returns the honest item count, an exhausted slot table answers
+ * NULL (the ofstream then fails its open and the Logger's own
+ * `if (m_fileStream)` guard skips the writes — the graceful shape the
+ * dxvk source already carries). Reads are not claimed: a "r" open
+ * answers NULL. The sinks grow by realloc like a real stream buffer;
+ * a FILE* that is not a sink (the static zeroed _iob above) is a no-op
+ * success on close and 0 items on write, same contract as fflush. */
+#include <stdlib.h> /* malloc/realloc/free — the block sits above file.c's own includes */
+#define MSVCRT_WASM_SINKS 8
+static struct
+{
+    FILE    file;
+    char   *buf;
+    size_t  len, cap;
+    int     in_use;
+} MSVCRT_wasm_sinks[MSVCRT_WASM_SINKS];
+
+static FILE *msvcrt_wasm_fopen(const char *path, const char *mode)
+{
+    int i, append = 0;
+    for (; *mode; mode++)
+    {
+        if (*mode == 'r') return NULL; /* no read semantics on this runtime */
+        if (*mode == 'a') append = 1;
+    }
+    for (i = 0; i < MSVCRT_WASM_SINKS; i++)
+        if (!MSVCRT_wasm_sinks[i].in_use) break;
+    if (i == MSVCRT_WASM_SINKS) return NULL;
+    if (!MSVCRT_wasm_sinks[i].buf)
+    {
+        MSVCRT_wasm_sinks[i].cap = 4096;
+        MSVCRT_wasm_sinks[i].buf = malloc(MSVCRT_wasm_sinks[i].cap);
+        if (!MSVCRT_wasm_sinks[i].buf) return NULL;
+    }
+    MSVCRT_wasm_sinks[i].len = 0; /* "w" truncates; the sinks are write-only */
+    MSVCRT_wasm_sinks[i].in_use = 1;
+    MSVCRT_wasm_sinks[i].file._base = MSVCRT_wasm_sinks[i].buf;
+    MSVCRT_wasm_sinks[i].file._ptr = MSVCRT_wasm_sinks[i].buf;
+    MSVCRT_wasm_sinks[i].file._cnt = 0;
+    MSVCRT_wasm_sinks[i].file._file = i;
+    (void)append;
+    return &MSVCRT_wasm_sinks[i].file;
+}
+
+FILE *__cdecl fopen(const char *path, const char *mode)
+{
+    return msvcrt_wasm_fopen(path, mode);
+}
+
+size_t __cdecl fwrite(const void *ptr, size_t size, size_t nitems, FILE *file)
+{
+    int i;
+    if (!file || !size) return 0;
+    i = file->_file;
+    if (i < 0 || i >= MSVCRT_WASM_SINKS || !MSVCRT_wasm_sinks[i].in_use
+        || file != &MSVCRT_wasm_sinks[i].file)
+        return 0; /* not a sink: the never-written stdio contract */
+    {
+        size_t bytes = size * nitems;
+        size_t fit;
+        if (MSVCRT_wasm_sinks[i].len + bytes > MSVCRT_wasm_sinks[i].cap)
+        {
+            size_t cap = MSVCRT_wasm_sinks[i].cap;
+            char *grown;
+            while (cap < MSVCRT_wasm_sinks[i].len + bytes) cap *= 2;
+            grown = realloc(MSVCRT_wasm_sinks[i].buf, cap);
+            if (!grown) fit = (MSVCRT_wasm_sinks[i].cap - MSVCRT_wasm_sinks[i].len) / size;
+            else
+            {
+                MSVCRT_wasm_sinks[i].buf = grown;
+                MSVCRT_wasm_sinks[i].cap = cap;
+                fit = nitems;
+            }
+        }
+        else fit = nitems;
+        __builtin_memcpy(MSVCRT_wasm_sinks[i].buf + MSVCRT_wasm_sinks[i].len, ptr, fit * size);
+        MSVCRT_wasm_sinks[i].len += fit * size;
+        MSVCRT_wasm_sinks[i].file._ptr = MSVCRT_wasm_sinks[i].buf + MSVCRT_wasm_sinks[i].len;
+        return fit;
+    }
+}
+
+int __cdecl fclose(FILE *file)
+{
+    int i;
+    if (!file) return 0;
+    i = file->_file;
+    if (i < 0 || i >= MSVCRT_WASM_SINKS || !MSVCRT_wasm_sinks[i].in_use
+        || file != &MSVCRT_wasm_sinks[i].file)
+        return 0; /* the static _iob streams are never closed (the fflush contract) */
+    MSVCRT_wasm_sinks[i].in_use = 0;
+    free(MSVCRT_wasm_sinks[i].buf);
+    MSVCRT_wasm_sinks[i].buf = NULL;
+    MSVCRT_wasm_sinks[i].len = MSVCRT_wasm_sinks[i].cap = 0;
+    return 0;
+}
 typedef int msvcrt_file_wasm_placeholder;
 #else
 /*
