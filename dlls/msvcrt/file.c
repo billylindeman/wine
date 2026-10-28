@@ -104,6 +104,36 @@ FILE *__cdecl fopen(const char *path, const char *mode)
     return msvcrt_wasm_fopen(path, mode);
 }
 
+/* wineweb (fd3dc): the WIDE arm of the same serve — the walk caught it
+ * to the line: the divert ring's in-flight slot was msvcrt position 24
+ * (_wfopen), never returned, the LOUD_ONLY trap. dxvk's str::topath
+ * hands the ofstream the WIDE path on _WIN32, so libstdc++'s
+ * __basic_file::open rides _wfopen, not fopen — the census is the same
+ * write-only handle, the sink family is the same table. */
+
+FILE *__cdecl _wfopen(const wchar_t *path, const wchar_t *mode)
+{
+    char narrow_path[128], narrow_mode[16];
+    if (!path || !mode) return NULL;
+    size_t plen = 0;
+    while (path[plen] && plen + 1 < sizeof(narrow_path)) plen++;
+    for (size_t i = 0; i < plen; i++)
+    {
+        if (path[i] > 0x7f) return NULL; /* a non-ASCII guest path has no honest narrow form here */
+        narrow_path[i] = (char)path[i];
+    }
+    narrow_path[plen] = 0;
+    size_t mlen = 0;
+    while (mode[mlen] && mlen + 1 < sizeof(narrow_mode))
+    {
+        if (mode[mlen] > 0x7f) return NULL;
+        narrow_mode[mlen] = (char)mode[mlen];
+        mlen++;
+    }
+    narrow_mode[mlen] = 0;
+    return msvcrt_wasm_fopen(narrow_path, narrow_mode);
+}
+
 size_t __cdecl fwrite(const void *ptr, size_t size, size_t nitems, FILE *file)
 {
     int i;
