@@ -184,22 +184,46 @@ int __cdecl fclose(FILE *file)
 /* wineweb (ffileno): the guest's libstdc++ __basic_file<char>::fd() rides
  * _fileno on the ofstream's own write path (xsputn_2's two-buffer route
  * checks the fd — the FSbb walk's terminus: msvcrt p10:14, the return into
- * fd() at 0x49380a). The honest answer is the FILE's slot: the sink-backed
- * files carry their sink slot in _file (the fd3dc arm sets it at open —
- * the slot index IS the fd); the three standard streams are the static
- * _iob[3] above, whose array position IS the fd (0/1/2 — the CRT's own
- * stdin/stdout/stderr numbering). NULL answers -1. No metadata semantics
- * are claimed beyond the slot identity — the sinks have no host fd.
+ * fd() at 0x49380a). The honest answer is the FILE's slot identity: the
+ * sink-backed files answer 3 + their sink slot (the CRT's own fd numbering
+ * — the standard streams own 0/1/2, the first open file is 3; the first
+ * probe returned the raw slot and the next serve, _write, got fd 0 —
+ * ambiguous against stdout); the three standard streams answer their _iob
+ * array position (0/1/2). NULL answers -1. No metadata semantics are
+ * claimed beyond the slot identity — the sinks have no host fd.
  * This supersedes the vkd3d wasm_shim's _fileno arm (d6cd686): the shim
  * exists for helpers the static wine archives do not define, and this
  * archive now defines it — one definition serves the guest import and
  * the vkd3d UCRT routes through the same link. */
+#define MSVCRT_WASM_SINK_FD_BASE 3
 int __cdecl _fileno(FILE *file)
 {
     if (!file) return -1;
     if (file >= MSVCRT__iob && file < MSVCRT__iob + 3)
         return (int)(file - MSVCRT__iob);
-    return file->_file;
+    if (file->_file >= 0 && file->_file < MSVCRT_WASM_SINKS)
+        return MSVCRT_WASM_SINK_FD_BASE + file->_file;
+    return -1;
+}
+/* wineweb (ffileno): the low-io write route the walk named one serve
+ * deeper (div[1373] p10:25 — libstdc++'s xsputn_2 rides _write(fd, buf,
+ * count) after the fd check; the trap's stack pinned it: fd 0, the line
+ * buffer, 0x1d bytes). The honest shape: a sink-backed fd retains the
+ * bytes (the fwrite arm's own growth + slot contract — the same in-memory
+ * sink); the standard streams succeed-and-discard (no console is claimed
+ * — the __stdio_common_vfprintf shim precedent); any other fd answers -1
+ * (no such fd on this runtime). */
+int __cdecl _write(int fd, const void *buf, unsigned int count)
+{
+    if (!buf && count) return -1;
+    if (fd >= MSVCRT_WASM_SINK_FD_BASE && fd < MSVCRT_WASM_SINK_FD_BASE + MSVCRT_WASM_SINKS)
+    {
+        FILE *sink = &MSVCRT_wasm_sinks[fd - MSVCRT_WASM_SINK_FD_BASE].file;
+        if (!MSVCRT_wasm_sinks[fd - MSVCRT_WASM_SINK_FD_BASE].in_use) return -1;
+        return fwrite(buf, 1, count, sink) == count ? (int)count : -1;
+    }
+    if (fd >= 0 && fd <= 2) return (int)count;
+    return -1;
 }
 /* wineweb (fd3dc): the read-side stdio the wine-internal consumers need
  * at the LINK (the d3dcompiler asmscanner — asmshader.yy.o — rides wine's
