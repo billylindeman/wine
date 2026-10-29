@@ -13,12 +13,24 @@
  *   - _dsign/_fdsign: real signbit.
  *   - _strtof_l: real strtof — the C locale is the only locale on this
  *     runtime (the locale argument is ignored); REACHED on the compile
- *     path (the shader float literals).
- *   - __stdio_common_vfprintf/vsprintf: the stdio WRITE seam (the
- *     file.c loud-family contract, ABI-shaped for the UCRT route) —
- *     the vkd3d debug/TRACE callers are flag-gated off on this runtime
- *     (VKD3D_DEBUG unset, served GetEnvironmentVariableA answers 0);
- *     the call succeeds and discards.
+ *     path (the shader float literals). strtof itself is DEFINED here:
+ *     wine's msvcrt strtof lives in the #if _MSVCR_VER>=120 block of
+ *     string.c, compiled out at _MSVCR_VER=0 — one honest definition
+ *     (float, the double→float narrowing of wine's own _strtof_l)
+ *     serves both names. The F5probe diagnosis: the earlier
+ *     `extern double strtof` left strtof UNDEFINED in the product link
+ *     — the linker resolved it to a trapping signature_mismatch stub
+ *     (the FFileno record's suspect, confirmed).
+ *   - __stdio_common_vfprintf/vsprintf: the stdio WRITE seam —
+ *     REACHED ON THE COMPILE PATH: vkd3d's string-buffer printf is the
+ *     preproc's token-emission route (preproc.yy.c:3170
+ *     vkd3d_string_buffer_printf(&ctx->buffer, "%s ", text)) and the
+ *     hlsl message context rides it too; the earlier succeed-and-
+ *     discard arm emptied the preprocessed source (the guest's clean
+ *     E_FAIL — the F5probe diagnosis, wasm32-probe-verified) — the arm
+ *     now formats for real. vfprintf stays the honest stderr no-op
+ *     (the guest has no stderr); the fd3dc census's "flag-gated off"
+ *     claim was wrong for the vsprintf arm, right for vfprintf.
  *   - _fileno: SUPERSEDED (ffileno) — the msvcrt file.c __wasm__ arm now
  *     defines it (the same link resolves the vkd3d routes through it); the
  *     shim's own copy was a duplicate strong symbol at the wasm-ld stage.
@@ -34,6 +46,10 @@
 
 #include <stddef.h>
 #include <stdarg.h>
+
+/* the real formatter (wasi-libc's; the wine stdio.h route would recurse
+ * into this very seam) */
+extern int vsnprintf(char *buffer, size_t buffer_count, const char *format, va_list args);
 
 /* wine's msvcrt FILE (the file.c __wasm__ arm's shape, verbatim). */
 typedef struct _iobuf
@@ -70,7 +86,17 @@ int __cdecl _fdsign(float x)
     return __builtin_signbit(x) ? 1 : 0;
 }
 
-extern double strtof(const char *nptr, char **endptr);
+/* wine's msvcrt strtof: the #if _MSVCR_VER>=120 block of string.c is
+ * compiled out at _MSVCR_VER=0, so the static archives define no
+ * strtof — one honest definition here serves the _strtof_l arm and any
+ * other CRT route (float contract; the double→float narrowing is
+ * wine's own _strtof_l shape). */
+extern double strtod(const char *nptr, char **endptr);
+float __cdecl strtof(const char *nptr, char **endptr)
+{
+    return (float)strtod(nptr, endptr);
+}
+
 float __cdecl _strtof_l(const char *nptr, char **endptr, void *locale)
 {
     (void)locale; /* the C locale is the only locale on this runtime */
@@ -87,10 +113,15 @@ int __cdecl __stdio_common_vfprintf(unsigned __int64 options, FILE *stream,
 int __cdecl __stdio_common_vsprintf(unsigned __int64 options, char *buffer,
         size_t buffer_count, const char *format, void *locale, void *args)
 {
-    (void)options; (void)format; (void)locale; (void)args;
-    if (buffer && buffer_count)
-        buffer[0] = 0; /* the wrappers' own termination contract sees "" */
-    return 0;
+    int ret;
+    (void)options; (void)locale;
+    if (!buffer || !buffer_count)
+        return 0;
+    /* REAL formatting: the preproc's token emission and the hlsl
+     * message context ride this (the F5probe diagnosis). vsnprintf is
+     * the wasi-libc one — same varargs handoff the callers use. */
+    ret = vsnprintf(buffer, buffer_count, format, (va_list)args);
+    return ret < 0 ? 0 : ret;
 }
 
 int __cdecl _fstat64i32(int fd, void *buf)
