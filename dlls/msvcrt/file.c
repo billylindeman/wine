@@ -225,6 +225,55 @@ int __cdecl _write(int fd, const void *buf, unsigned int count)
     if (fd >= 0 && fd <= 2) return (int)count;
     return -1;
 }
+/* wineweb (F6sb): the stdout capture — the pin's printf route is per-char
+ * fputc (the F7b walk's terminus: msvcrt p10:35, after __iob_func/_lock/
+ * _errno all serve). The honest serve: stdout bytes append to a fixed-VA
+ * capture ring — the esp-trace-ring standard (the oracle's
+ * wall-diagnostic layout: div/blk 0x1ff000, rv 0x1fe000), one page down
+ * at 0x1fd000, inside the boot's LOW_FENCE [0x10000, 0x200000) where no
+ * guest allocation can land and the module's own statics do not reach
+ * (verified: the wasm data segments cover [0x800000, 0xe295c0] only).
+ * Layout: u32 len at +0, the bytes at +4, capacity 4092; writes past the
+ * capacity are dropped (the F3a gate's stdout is 86 bytes). The page
+ * reads the ring into its result's guest.stdout after the run — the
+ * 86-byte ref-stdout compare surface (the refcount-0 "Count: 0" and the
+ * dead-container E_NOINTERFACE! ride inside it). stderr keeps the _write
+ * contract (succeed-and-discard — the DxvkError paths are silent by
+ * design); a sink-backed FILE writes through the fwrite arm (the fd3dc
+ * sink contract completed for the putc family); stdin/NULL answer EOF
+ * (wine's native contract: the char written, EOF on error — file.c's
+ * native fputc). */
+#define MSVCRT_WASM_STDOUT_RING 0x001fd000u
+#define MSVCRT_WASM_STDOUT_CAP  4092
+
+static void msvcrt_wasm_stdout_put(int c)
+{
+    unsigned int len = *(unsigned int *)MSVCRT_WASM_STDOUT_RING;
+    if (len < MSVCRT_WASM_STDOUT_CAP)
+    {
+        *(unsigned char *)(MSVCRT_WASM_STDOUT_RING + 4 + len) = (unsigned char)c;
+        *(unsigned int *)MSVCRT_WASM_STDOUT_RING = len + 1;
+    }
+}
+
+int __cdecl fputc(int c, FILE *file)
+{
+    if (!file) return -1; /* EOF */
+    if (file == &MSVCRT__iob[1]) /* stdout: the capture sink */
+    {
+        msvcrt_wasm_stdout_put(c);
+        return (unsigned char)c;
+    }
+    if (file == &MSVCRT__iob[2]) return (unsigned char)c; /* stderr: the _write contract */
+    if (file == &MSVCRT__iob[0]) return -1; /* stdin: no write semantics */
+    {
+        int i = file->_file;
+        if (i >= 0 && i < MSVCRT_WASM_SINKS && MSVCRT_wasm_sinks[i].in_use
+            && file == &MSVCRT_wasm_sinks[i].file)
+            return fwrite(&c, 1, 1, file) == 1 ? (int)(unsigned char)c : -1;
+    }
+    return -1; /* not a stream this runtime backs */
+}
 /* wineweb (fd3dc): the read-side stdio the wine-internal consumers need
  * at the LINK (the d3dcompiler asmscanner — asmshader.yy.o — rides wine's
  * stdin/stderr macros and <stdio.h>'s fread/getc/clearerr/ferror, and its
