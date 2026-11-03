@@ -290,45 +290,6 @@ NTSTATUS WINAPI RtlDeleteCriticalSection( RTL_CRITICAL_SECTION *crit )
     crit->LockSemaphore = 0;
     return STATUS_SUCCESS;
 }
-
-
-#ifdef __wasm__ /* wineweb: name the contended cs once — the P3.0 sched-seam
-                 * probe (which cs, its LockCount and owner). The diag group
-                 * prints it; the P3.0 spike's §2 table reads it. */
-__attribute__((import_module("wineweb_host"), import_name("log")))
-extern void wineweb_sched_probe_log(int level, const char *ptr, unsigned len);
-static void wineweb_cs_probe( RTL_CRITICAL_SECTION *crit )
-{
-    static BOOL logged;
-    static const char hex[] = "0123456789abcdef";
-    char buf[128];
-    unsigned pos = 0;
-    const char *m = "wineweb: cs wait — cs=";
-    ULONG_PTR v;
-    int s;
-
-    if (logged) return;
-    logged = TRUE;
-    for (const char *c = m; *c; c++) buf[pos++] = *c;
-    v = (ULONG_PTR)crit;
-    for (s = 28; s >= 0; s -= 4) buf[pos++] = hex[(v >> s) & 0xf];
-    m = " LockCount=";
-    for (const char *c = m; *c; c++) buf[pos++] = *c;
-    v = (ULONG_PTR)crit->LockCount;
-    for (s = 7; s >= 0; s -= 4) buf[pos++] = hex[(v >> s) & 0xf];
-    m = " OwningThread=";
-    for (const char *c = m; *c; c++) buf[pos++] = *c;
-    v = (ULONG_PTR)crit->OwningThread;
-    for (s = 28; s >= 0; s -= 4) buf[pos++] = hex[(v >> s) & 0xf];
-    m = " tid=";
-    for (const char *c = m; *c; c++) buf[pos++] = *c;
-    v = (ULONG_PTR)NtCurrentTeb()->ClientId.UniqueThread;
-    for (s = 7; s >= 0; s -= 4) buf[pos++] = hex[(v >> s) & 0xf];
-    buf[pos++] = '\n';
-    wineweb_sched_probe_log( 0 /* info */, buf, pos );
-}
-#endif
-
 /******************************************************************************
  *      RtlpWaitForCriticalSection   (NTDLL.@)
  */
@@ -344,8 +305,7 @@ NTSTATUS WINAPI RtlpWaitForCriticalSection( RTL_CRITICAL_SECTION *crit )
      * (the TID forms never matched — the same class as the TEB ClientId
      * walls). Both resolve as the win32 recursive enter: succeed with the
      * RecursionCount bumped. The genuine cross-thread contention is the
-     * worker-ization's to handle (P6). The probe stays for the diag. */
-    wineweb_cs_probe( crit );
+     * worker-ization's to handle (P6). */
     if (crit->OwningThread == ULongToHandle(GetCurrentThreadId()))
     {
         crit->RecursionCount++;
