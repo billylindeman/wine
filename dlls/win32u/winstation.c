@@ -225,30 +225,7 @@ const shared_object_t *find_shared_session_object( object_id_t id, mem_size_t of
     {
         object = (const shared_object_t *)(block->data + offset - block->offset);
         if (id == shared_object_get_id( object )) return object;
-#ifdef __wasm__ /* wineweb (patch 0028 W8): raw values — the %s path prints
-                 * empty for 0, and the run-9 probe showed id 0/8 offset 0 —
-                 * dump the whole raw object header (8 words) to name the writer. */
-        {
-            const volatile unsigned int *raw = (const volatile unsigned int *)object;
-            ERR( "W8: session id mismatch exp %u/%u at off %u/%u obj %u %u %u %u %u %u %u %u\n",
-                 (unsigned)id, (unsigned)(id >> 32), (unsigned)offset, (unsigned)(offset >> 32),
-                 raw[0], raw[1], raw[2], raw[3], raw[4], raw[5], raw[6], raw[7] );
-        }
-#else
-        ERR( "W6: session object id mismatch expected %s got %s (offset %s)\n",
-             wine_dbgstr_longlong(id), wine_dbgstr_longlong( shared_object_get_id( object )),
-             wine_dbgstr_longlong(offset) );
-#endif
-    }
-    else
-    {
-#ifdef __wasm__
-        ERR( "W8: session lookup failed id %u/%u off %u/%u status %#x\n",
-             (unsigned)id, (unsigned)(id >> 32), (unsigned)offset, (unsigned)(offset >> 32), status );
-#else
-        ERR( "W6: session block lookup failed id %s offset %s status %#x\n",
-             wine_dbgstr_longlong(id), wine_dbgstr_longlong(offset), status );
-#endif
+        WARN( "Session object id doesn't match expected id %s\n", wine_dbgstr_longlong(id) );
     }
 
     return NULL;
@@ -889,12 +866,10 @@ HWND get_desktop_window(void)
     struct user_thread_info *thread_info = get_user_thread_info();
     BOOL is_service;
 
-    ERR( "W6: get_desktop_window enter top_window %p\n", thread_info->top_window );
     if (thread_info->top_window) return thread_info->top_window;
 
     /* don't create an actual explorer desktop window for services */
     is_service = is_service_process();
-    ERR( "W6: is_service %d\n", is_service );
 
     SERVER_START_REQ( get_desktop_window )
     {

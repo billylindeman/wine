@@ -482,18 +482,6 @@ static LRESULT dispatch_win_proc_params( struct win_proc_params *params, size_t 
     else
     {
         UINT_PTR proc = (UINT_PTR)params->procW;
-        /* wineweb: trace the key/paint-class dispatches only. The
-         * unconditional per-dispatch trace (the T3c-era diag) floods the
-         * driver's bounded diag ring on a healthy pump — the pump rounds
-         * accumulate >200 drops inside one parked dispatch step and the
-         * typed records never deliver (the T3 delivery bisect: the
-         * unconditional trace → 0 get_message fetches + the pool-corridor
-         * death; the quieted trace → 54 fetches + the T3 gate green). The
-         * key/paint classes are the buffer leg's evidence channel. */
-        if ((params->msg >= 0x100 && params->msg <= 0x102) || params->msg == 0x0f)
-            ERR( "W8: key dispatch hwnd %x msg %u wp %x lp %x proc %x\n",
-                 (unsigned)(UINT_PTR)params->hwnd, params->msg,
-                 (unsigned)params->wparam, (unsigned)params->lparam, (unsigned)proc );
         /* The proc is either a guest VA (the image lives at/below the
          * corridor end) or a builtin's wasm function pointer — those are
          * small table indices in this toolchain (the W8 run-13 evidence: a
@@ -4482,15 +4470,6 @@ static BOOL process_message( struct send_message_info *info, DWORD_PTR *res_ptr,
 
     if (!(info->dest_tid = get_window_thread( info->hwnd, &dest_pid ))) return FALSE;
     if (is_exiting_thread( info->dest_tid )) return FALSE;
-
-#ifdef __wasm__ /* wineweb (patch 0028 W8): the tid-identity comparison
-                 * site, named loudly. In the single-thread boot a
-                 * same-process send can never be cross-thread — a
-                 * divergence here is the identity wall itself. */
-    if (dest_pid == GetCurrentProcessId() && info->dest_tid != GetCurrentThreadId())
-        ERR( "W8: tid divergence on msg %u: shm entry tid %u vs current tid %u\n",
-             info->msg, info->dest_tid, GetCurrentThreadId() );
-#endif
 
     if (info->params && info->dest_tid == GetCurrentThreadId() &&
         !is_hooked( WH_CALLWNDPROC ) && !is_hooked( WH_CALLWNDPROCRET ) &&
