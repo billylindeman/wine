@@ -885,6 +885,11 @@ LRESULT WINAPI CallWindowProcW( WNDPROC func, HWND hwnd, UINT msg, WPARAM wParam
 {
     struct win_proc_params params;
 
+#ifdef __wasm__ /* wineweb: TEMPORARY Phase-0 probe — the func CallWindowProcW receives */
+    if (msg == WM_SYSTIMER)
+        ERR( "W8: CallWindowProcW SYSTIMER func %x hwnd %x\n",
+             (unsigned)(UINT_PTR)func, (unsigned)(UINT_PTR)hwnd );
+#endif
     params.func = func;
     if (!NtUserMessageCall( hwnd, msg, wParam, lParam, &params, NtUserCallWindowProc, FALSE ))
         return 0;
@@ -1137,6 +1142,12 @@ void winproc_init(void)
                             client_procs.workers, sizeof(client_procs.workers) );
     RtlRetrieveNtUserPfn( (const void **)&ptr_A, (const void **)&ptr_W, (const void **)&ptr_workers );
     NtUserInitializeClientPfnArrays( ptr_A, ptr_W, ptr_workers, user32_module );
+#ifdef __wasm__ /* wineweb: TEMPORARY Phase-0 probe — the raw builtin proc at its source */
+    {
+        extern unsigned int wineweb_probe_id_clientp_edit_w;
+        wineweb_probe_id_clientp_edit_w = (UINT_PTR)client_procs.W[NTUSER_WNDPROC_EDIT][0];
+    }
+#endif
 #ifndef _WIN64
     fixup_forwards();
 #endif

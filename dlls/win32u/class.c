@@ -172,6 +172,19 @@ static WINDOWPROC winproc_array[MAX_WINPROCS];
 static UINT winproc_used = NTUSER_NB_PROCS;
 static pthread_mutex_t winproc_lock = PTHREAD_MUTEX_INITIALIZER;
 
+/* wineweb: TEMPORARY Phase-0 probe (the builtin-proc identity hunt) —
+ * reverted after the read. External-linkage statics the rex probe export
+ * (wineweb_probe_hostid, crates/wineweb-runtime/src/rex/exports.rs) reads:
+ * the registration values and the pfn-array state. */
+#ifdef __wasm__
+unsigned int wineweb_probe_id_reg_n;
+unsigned int wineweb_probe_id_reg_ring[16][3]; /* {lpfnWndProc, fnid, atom} */
+unsigned int wineweb_probe_id_pfn_used;
+unsigned int wineweb_probe_id_pfn_edit_a;
+unsigned int wineweb_probe_id_pfn_edit_w;
+unsigned int wineweb_probe_id_clientp_edit_w;
+#endif
+
 static struct list class_list = LIST_INIT( class_list );
 
 HINSTANCE user32_module = 0;
@@ -225,6 +238,9 @@ static inline WINDOWPROC *alloc_winproc_ptr( WNDPROC func, BOOL ansi )
         if (winproc_used < MAX_WINPROCS)
         {
             proc = &winproc_array[winproc_used++];
+#ifdef __wasm__ /* wineweb: TEMPORARY Phase-0 probe — keep the used-count live */
+            wineweb_probe_id_pfn_used = winproc_used;
+#endif
             if (ansi) proc->procA = func;
             else proc->procW = func;
             TRACE_(win)( "allocated %p for %c %p (%d/%d used)\n", MAKE_WNDPROC(proc - winproc_array),
@@ -348,6 +364,12 @@ NTSTATUS WINAPI NtUserInitializeClientPfnArrays( const ntuser_client_func_ptr *c
         winproc_array[i].procW = client_procsW[i][0];
     }
     user32_module = user_module;
+
+#ifdef __wasm__ /* wineweb: TEMPORARY Phase-0 probe — the pfn-array fill's receipt */
+    wineweb_probe_id_pfn_used = winproc_used;
+    wineweb_probe_id_pfn_edit_a = (UINT_PTR)winproc_array[NTUSER_WNDPROC_EDIT].procA;
+    wineweb_probe_id_pfn_edit_w = (UINT_PTR)winproc_array[NTUSER_WNDPROC_EDIT].procW;
+#endif
 
     pthread_once( &init_once, init_user );
     return STATUS_SUCCESS;
@@ -693,6 +715,19 @@ ATOM WINAPI NtUserRegisterClassExWOW( const WNDCLASSEXW *wc, UNICODE_STRING *nam
     TRACE( "name=%s->%s atom=%04x wndproc=%p hinst=%p bg=%p style=%08x clsExt=%d winExt=%d class=%p\n",
            debugstr_w(wc->lpszClassName), debugstr_us(name), atom, wc->lpfnWndProc, instance,
            wc->hbrBackground, wc->style, wc->cbClsExtra, wc->cbWndExtra, class );
+
+#ifdef __wasm__ /* wineweb: TEMPORARY Phase-0 probe — the registered lpfnWndProc */
+    {
+        unsigned int n = wineweb_probe_id_reg_n;
+        if (n < 16)
+        {
+            wineweb_probe_id_reg_ring[n][0] = (UINT_PTR)wc->lpfnWndProc;
+            wineweb_probe_id_reg_ring[n][1] = fnid;
+            wineweb_probe_id_reg_ring[n][2] = atom;
+        }
+        wineweb_probe_id_reg_n = n + 1;
+    }
+#endif
 
     class->icon_internal = icon_internal;
     class->shared        = shared;

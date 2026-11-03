@@ -882,9 +882,20 @@ LRESULT WINAPI DECLSPEC_HOTPATCH DispatchMessageW( const MSG* msg )
     if (msg->message == WM_COMMAND)
         ERR( "WWS12 dispatch cmd: hwnd %p wp %x\n", (void *)(UINT_PTR)msg->hwnd, (unsigned)msg->wParam );
 #endif
+#ifdef __wasm__ /* wineweb: TEMPORARY Phase-0 probe — the SYSTIMER's lParam at entry */
+    if (msg->message == WM_SYSTIMER)
+    {
+        const unsigned int *raw = (const unsigned int *)msg;
+        extern unsigned int wineweb_probe_id_fill_addr;
+        extern unsigned int wineweb_probe_id_esp(void);
+        ERR( "W8: DispatchMessageW SYSTIMER &msg %x filladdr %x esp %x raw[%x %x %x %x %x %x]\n",
+             (unsigned)(UINT_PTR)msg, wineweb_probe_id_fill_addr, wineweb_probe_id_esp(),
+             raw[0], raw[1], raw[2], raw[3], raw[4], raw[5] );
+    }
+#endif
 
       /* Process timer messages */
-    if ((msg->message == WM_TIMER) || (msg->message == WM_SYSTIMER))
+    if (msg->message == WM_TIMER)
     {
         if (msg->lParam)
         {
