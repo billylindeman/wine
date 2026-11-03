@@ -231,11 +231,11 @@ NTSTATUS wineweb_internal_callback( unsigned int slot, void *args, ULONG len )
 {
     switch (slot)
     {
-#define WINWEB_CALLBACK_CASE(name) \
+#define USER32_CALLBACK_ENTRY(name) \
     case WINWEB_IP_User32##name: return User32##name( args, len );
     ALL_USER32_CALLBACKS
+#undef USER32_CALLBACK_ENTRY
     }
-#undef WINWEB_CALLBACK_CASE
     ERR( "wineweb: internal-proc trampoline got slot %u outside the callback family\n", slot );
     return STATUS_NOT_IMPLEMENTED;
 }

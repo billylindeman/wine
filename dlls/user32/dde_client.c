@@ -1289,7 +1289,7 @@ BOOL WINAPI DdeAbandonTransaction(DWORD idInst, HCONV hConv, DWORD idTransaction
  *
  * Window Proc created on client side for each conversation
  */
-static LRESULT CALLBACK WDML_ClientProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK WDML_ClientProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 {
     UINT	uiLo, uiHi;
     WDML_CONV*	pConv = NULL;

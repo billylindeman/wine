@@ -1163,6 +1163,7 @@ SOURCES = \
 	wine/winuser16.h \
 	winerror.h \
 	winevt.h \
+	wineweb_internal.h \
 	wingdi.h \
 	winhttp.h \
 	wininet.h \
