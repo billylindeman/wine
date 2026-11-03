@@ -868,7 +868,7 @@ LRESULT WINAPI DECLSPEC_HOTPATCH DispatchMessageW( const MSG* msg )
     LRESULT retval;
 
       /* Process timer messages */
-    if (msg->message == WM_TIMER)
+    if ((msg->message == WM_TIMER) || (msg->message == WM_SYSTIMER))
     {
         if (msg->lParam)
         {
