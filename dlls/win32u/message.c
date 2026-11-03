@@ -463,6 +463,8 @@ static BOOL init_window_call_params( struct win_proc_params *params, HWND hwnd, 
 #ifdef __wasm__ /* wineweb: the in-module guest-call primitive (patch 0023) */
 extern unsigned int wineweb_guest_call( unsigned int proc, unsigned int hwnd, unsigned int msg,
                                         unsigned int wparam, unsigned int lparam );
+/* wineweb: the internal-proc marker arm (the HostFn-registry block) */
+#include "wineweb_internal.h"
 #endif
 
 static LRESULT dispatch_win_proc_params( struct win_proc_params *params, size_t size,
@@ -495,14 +497,26 @@ static LRESULT dispatch_win_proc_params( struct win_proc_params *params, size_t 
                  (unsigned)(UINT_PTR)params->hwnd, params->msg,
                  (unsigned)params->wparam, (unsigned)params->lparam, (unsigned)proc );
         /* The proc is either a guest VA (the image lives at/below the
-         * corridor end) or a builtin's wasm function pointer — those are
-         * small table indices in this toolchain (the W8 run-13 evidence: a
-         * builtin proc fed to wineweb_guest_call lifted garbage). */
+         * corridor end), a builtin's HostFn marker (the internal-proc
+         * registry — every builtin identity flows guest-visible as a
+         * marker, serviced through the marker machinery: the HostFn
+         * reads the stdcall args off the guest stack, the W3 contract —
+         * the funcref call_indirect died here), or a stale funcref
+         * identity (an inventory miss — named, loud, once). */
         if (proc >= 0x400000u && proc < 0x20000000u)
             result = wineweb_guest_call( (unsigned)proc, (unsigned)(UINT_PTR)params->hwnd,
                                          params->msg, params->wparam, params->lparam );
+        else if (wineweb_is_internal_marker( proc ))
+            result = wineweb_internal_call( proc, (unsigned)(UINT_PTR)params->hwnd,
+                                            params->msg, params->wparam, params->lparam );
         else
-            result = ((WNDPROC)proc)( params->hwnd, params->msg, params->wparam, params->lparam );
+        {
+            static int warned;
+            if (!warned++)
+                ERR( "wineweb: non-marker builtin proc %x reached the dispatch (msg %u) — an inventory miss, contained\n",
+                     (unsigned)proc, params->msg );
+            result = 0;
+        }
     }
     thread_info->msg_call_depth--;
     return result;

@@ -26,6 +26,9 @@
 #include <wchar.h>
 #include "user_private.h"
 #include "dde_private.h"
+#ifdef __wasm__ /* wineweb: the internal-proc marker contract */
+#include "wineweb_internal.h"
+#endif
 #include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(ddeml);
@@ -33,8 +36,8 @@ WINE_DEFAULT_DEBUG_CHANNEL(ddeml);
 const char WDML_szServerConvClassA[] = "WineDdeServerConvA";
 const WCHAR WDML_szServerConvClassW[] = L"WineDdeServerConvW";
 
-static LRESULT CALLBACK WDML_ServerNameProc(HWND, UINT, WPARAM, LPARAM);
-static LRESULT CALLBACK WDML_ServerConvProc(HWND, UINT, WPARAM, LPARAM);
+LRESULT CALLBACK WDML_ServerNameProc(HWND, UINT, WPARAM, LPARAM);
+LRESULT CALLBACK WDML_ServerConvProc(HWND, UINT, WPARAM, LPARAM);
 
 /******************************************************************************
  * DdePostAdvise [USER32.@]  Send transaction to DDE callback function.
@@ -212,7 +215,11 @@ HDDEDATA WINAPI DdeNameService(DWORD idInst, HSZ hsz1, HSZ hsz2, UINT afCmd)
 
 	wndclass.cbSize        = sizeof(wndclass);
 	wndclass.style         = 0;
+#ifdef __wasm__ /* wineweb: the builtin identity is a HostFn marker */
+	wndclass.lpfnWndProc   = (WNDPROC)(UINT_PTR)wineweb_internal_procs[WINWEB_IP_WDML_ServerNameProc];
+#else
 	wndclass.lpfnWndProc   = WDML_ServerNameProc;
+#endif
 	wndclass.cbClsExtra    = 0;
 	wndclass.cbWndExtra    = 2 * sizeof(ULONG_PTR);
 	wndclass.hInstance     = 0;
@@ -288,7 +295,11 @@ static WDML_CONV* WDML_CreateServerConv(WDML_INSTANCE* pInstance, HWND hwndClien
 
         wndclass.cbSize        = sizeof(wndclass);
         wndclass.style         = 0;
+#ifdef __wasm__ /* wineweb: the builtin identity is a HostFn marker */
+        wndclass.lpfnWndProc   = (WNDPROC)(UINT_PTR)wineweb_internal_procs[WINWEB_IP_WDML_ServerConvProc];
+#else
         wndclass.lpfnWndProc   = WDML_ServerConvProc;
+#endif
         wndclass.cbClsExtra    = 0;
         wndclass.cbWndExtra    = 2 * sizeof(ULONG_PTR);
         wndclass.hInstance     = 0;
@@ -311,7 +322,11 @@ static WDML_CONV* WDML_CreateServerConv(WDML_INSTANCE* pInstance, HWND hwndClien
 
         wndclass.cbSize        = sizeof(wndclass);
         wndclass.style         = 0;
+#ifdef __wasm__ /* wineweb: the builtin identity is a HostFn marker */
+        wndclass.lpfnWndProc   = (WNDPROC)(UINT_PTR)wineweb_internal_procs[WINWEB_IP_WDML_ServerConvProc];
+#else
         wndclass.lpfnWndProc   = WDML_ServerConvProc;
+#endif
         wndclass.cbClsExtra    = 0;
         wndclass.cbWndExtra    = 2 * sizeof(ULONG_PTR);
         wndclass.hInstance     = 0;
@@ -361,7 +376,7 @@ static WDML_CONV* WDML_CreateServerConv(WDML_INSTANCE* pInstance, HWND hwndClien
  *
  *
  */
-static LRESULT CALLBACK WDML_ServerNameProc(HWND hwndServer, UINT iMsg, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK WDML_ServerNameProc(HWND hwndServer, UINT iMsg, WPARAM wParam, LPARAM lParam)
 {
     HWND		hwndClient;
     HSZ			hszApp, hszTop;
@@ -1012,7 +1027,7 @@ WDML_QUEUE_STATE WDML_ServerHandle(WDML_CONV* pConv, WDML_XACT* pXAct)
  *
  *
  */
-static LRESULT CALLBACK WDML_ServerConvProc(HWND hwndServer, UINT iMsg, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK WDML_ServerConvProc(HWND hwndServer, UINT iMsg, WPARAM wParam, LPARAM lParam)
 {
     WDML_INSTANCE*	pInstance;
     WDML_CONV*		pConv;

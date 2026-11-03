@@ -25,11 +25,14 @@
 
 #include "user_private.h"
 #include "dde_private.h"
+#ifdef __wasm__ /* wineweb: the internal-proc marker contract */
+#include "wineweb_internal.h"
+#endif
 #include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(ddeml);
 
-static LRESULT CALLBACK WDML_ClientProc(HWND, UINT, WPARAM, LPARAM);	/* only for one client, not conv list */
+LRESULT CALLBACK WDML_ClientProc(HWND, UINT, WPARAM, LPARAM);	/* only for one client, not conv list */
 const char WDML_szClientConvClassA[] = "WineDdeClientA";
 const WCHAR WDML_szClientConvClassW[] = L"WineDdeClientW";
 
@@ -114,7 +117,11 @@ HCONV WINAPI DdeConnect(DWORD idInst, HSZ hszService, HSZ hszTopic,
 
         wndclass.cbSize        = sizeof(wndclass);
         wndclass.style         = 0;
+#ifdef __wasm__ /* wineweb: the builtin identity is a HostFn marker */
+        wndclass.lpfnWndProc   = (WNDPROC)(UINT_PTR)wineweb_internal_procs[WINWEB_IP_WDML_ClientProc];
+#else
         wndclass.lpfnWndProc   = WDML_ClientProc;
+#endif
         wndclass.cbClsExtra    = 0;
         wndclass.cbWndExtra    = 2 * sizeof(ULONG_PTR);
         wndclass.hInstance     = 0;
@@ -135,7 +142,11 @@ HCONV WINAPI DdeConnect(DWORD idInst, HSZ hszService, HSZ hszTopic,
 
         wndclass.cbSize        = sizeof(wndclass);
         wndclass.style         = 0;
+#ifdef __wasm__ /* wineweb: the builtin identity is a HostFn marker */
+        wndclass.lpfnWndProc   = (WNDPROC)(UINT_PTR)wineweb_internal_procs[WINWEB_IP_WDML_ClientProc];
+#else
         wndclass.lpfnWndProc   = WDML_ClientProc;
+#endif
         wndclass.cbClsExtra    = 0;
         wndclass.cbWndExtra    = 2 * sizeof(ULONG_PTR);
         wndclass.hInstance     = 0;

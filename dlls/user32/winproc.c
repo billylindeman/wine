@@ -25,6 +25,9 @@
 #include "dbt.h"
 #include "wine/asm.h"
 #include "wine/debug.h"
+#ifdef __wasm__ /* wineweb: the internal-proc HostFn marker contract */
+#include "wineweb_internal.h"
+#endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(msg);
 WINE_DECLARE_DEBUG_CHANNEL(relay);
@@ -1120,6 +1123,74 @@ struct wow_handlers16 wow_handlers =
 #define ComboLBoxWndProcW ListBoxWndProcW
 #define GhostWndProcA DefWindowProcA
 #define GhostWndProcW DefWindowProcW
+
+#ifdef __wasm__ /* wineweb: the internal-proc HostFn marker family */
+
+/* The boot-seeded marker array (include/wineweb_internal.h): the boot
+ * fills it with the internal-proc HostFn markers before stage USER32 —
+ * the same pattern as the IAT slot writes. The fork sites read their
+ * slots from it; the values are the ONLY form a builtin identity takes
+ * in a guest-visible flow. */
+unsigned int wineweb_internal_procs[WINWEB_INTERNAL_PROC_COUNT];
+
+/* The DDE class procs (dde_client.c/dde_misc.c/dde_server.c) — the
+ * marker slots' callees. They ride the same stdcall wndproc shape. */
+extern LRESULT CALLBACK WDML_ClientProc( HWND, UINT, WPARAM, LPARAM );
+extern LRESULT CALLBACK WDML_EventProc( HWND, UINT, WPARAM, LPARAM );
+extern LRESULT CALLBACK WDML_ServerNameProc( HWND, UINT, WPARAM, LPARAM );
+extern LRESULT CALLBACK WDML_ServerConvProc( HWND, UINT, WPARAM, LPARAM );
+
+/* The internal-proc trampoline: the slot's wine-c wndproc, called with
+ * the marshalled stdcall frame. The rex HostFn closure (the W3 contract:
+ * the args read off the guest stack) lands here — one extern "C" entry
+ * wrapping the whole family, the statics' linkage untouched. */
+LRESULT wineweb_internal_wndproc( unsigned int slot, HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
+{
+    switch (slot)
+    {
+    case WINWEB_IP_ScrollBarWndProcA:    return ScrollBarWndProcA( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_ScrollBarWndProcW:    return ScrollBarWndProcW( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_MessageWndProcA:      return MessageWndProcA( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_MessageWndProcW:      return MessageWndProcW( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_PopupMenuWndProcA:    return PopupMenuWndProcA( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_PopupMenuWndProcW:    return PopupMenuWndProcW( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_DesktopWndProcA:      return DesktopWndProcA( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_DesktopWndProcW:      return DesktopWndProcW( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_DefWindowProcA:       return DefWindowProcA( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_DefWindowProcW:       return DefWindowProcW( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_IconTitleWndProcA:    return IconTitleWndProcA( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_IconTitleWndProcW:    return IconTitleWndProcW( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_ButtonWndProcA:       return ButtonWndProcA( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_ButtonWndProcW:       return ButtonWndProcW( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_ComboWndProcA:        return ComboWndProcA( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_ComboWndProcW:        return ComboWndProcW( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_ComboLBoxWndProcA:    return ComboLBoxWndProcA( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_ComboLBoxWndProcW:    return ComboLBoxWndProcW( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_DialogWndProcA:       return DialogWndProcA( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_DialogWndProcW:       return DialogWndProcW( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_EditWndProcA:         return EditWndProcA( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_EditWndProcW:         return EditWndProcW( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_ListBoxWndProcA:      return ListBoxWndProcA( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_ListBoxWndProcW:      return ListBoxWndProcW( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_MDIClientWndProcA:    return MDIClientWndProcA( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_MDIClientWndProcW:    return MDIClientWndProcW( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_StaticWndProcA:       return StaticWndProcA( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_StaticWndProcW:       return StaticWndProcW( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_ImeWndProcA:          return ImeWndProcA( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_ImeWndProcW:          return ImeWndProcW( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_GhostWndProcA:        return GhostWndProcA( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_GhostWndProcW:        return GhostWndProcW( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_WDML_ClientProc:      return WDML_ClientProc( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_WDML_EventProc:       return WDML_EventProc( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_WDML_ServerNameProc:  return WDML_ServerNameProc( hwnd, msg, wparam, lparam );
+    case WINWEB_IP_WDML_ServerConvProc:  return WDML_ServerConvProc( hwnd, msg, wparam, lparam );
+    default:
+        ERR( "wineweb: internal-proc trampoline got slot %u outside the wndproc family\n", slot );
+        return 0;
+    }
+}
+
+#endif /* __wasm__ */
 
 static const struct ntuser_client_procs_table client_procs =
 {

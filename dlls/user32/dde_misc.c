@@ -25,6 +25,9 @@
 
 #include "user_private.h"
 #include "dde_private.h"
+#ifdef __wasm__ /* wineweb: the internal-proc marker contract */
+#include "wineweb_internal.h"
+#endif
 #include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(ddeml);
@@ -756,7 +759,7 @@ static void WDML_IncrementInstanceId(WDML_INSTANCE* pInstance)
  *
  *
  */
-static LRESULT CALLBACK WDML_EventProc(HWND hwndEvent, UINT uMsg, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK WDML_EventProc(HWND hwndEvent, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     WDML_INSTANCE*	pInstance;
     HSZ			hsz1, hsz2;
@@ -966,7 +969,11 @@ static UINT WDML_Initialize(LPDWORD pidInst, PFNCALLBACK pfnCallback,
 	/* for deadlock issues, windows must always be created when outside the critical section */
 	wndclass.cbSize        = sizeof(wndclass);
 	wndclass.style         = 0;
+#ifdef __wasm__ /* wineweb: the builtin identity is a HostFn marker */
+	wndclass.lpfnWndProc   = (WNDPROC)(UINT_PTR)wineweb_internal_procs[WINWEB_IP_WDML_EventProc];
+#else
 	wndclass.lpfnWndProc   = WDML_EventProc;
+#endif
 	wndclass.cbClsExtra    = 0;
 	wndclass.cbWndExtra    = sizeof(ULONG_PTR);
 	wndclass.hInstance     = 0;

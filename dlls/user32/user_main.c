@@ -218,6 +218,29 @@ static KERNEL_CALLBACK_PROC kernel_callback_table[NtUserCallCount] =
 #undef USER32_CALLBACK_ENTRY
 };
 
+#ifdef __wasm__ /* wineweb: the internal-proc HostFn marker contract */
+#include "wineweb_internal.h"
+
+/* The internal-proc callback trampoline: the slot's User32* callback,
+ * called with the (args, len) KERNEL_CALLBACK_PROC frame. The rex HostFn
+ * closure (the W3 contract: the args read off the guest stack) lands
+ * here — one extern "C" entry wrapping the family, the statics' linkage
+ * untouched. Answers the callback's NTSTATUS (the NtCallbackReturn record
+ * rides the shim's wrap, not this return). */
+NTSTATUS wineweb_internal_callback( unsigned int slot, void *args, ULONG len )
+{
+    switch (slot)
+    {
+#define WINWEB_CALLBACK_CASE(name) \
+    case WINWEB_IP_User32##name: return User32##name( args, len );
+    ALL_USER32_CALLBACKS
+    }
+#undef WINWEB_CALLBACK_CASE
+    ERR( "wineweb: internal-proc trampoline got slot %u outside the callback family\n", slot );
+    return STATUS_NOT_IMPLEMENTED;
+}
+#endif
+
 #ifdef __wasm__ /* wineweb: the unified archive skips DllMain (the imm32 load
                  * has no wasm route — see the p38 harness's attach comment);
                  * the boot installs the table itself, and the harness's
@@ -225,6 +248,22 @@ static KERNEL_CALLBACK_PROC kernel_callback_table[NtUserCallCount] =
                  * exactly like ntdll's dispatch_user_callback. */
 void user32_install_callback_table(void)
 {
+#ifdef __wasm__ /* wineweb: the table entries are HostFn markers — the PEB
+                 * table is guest-visible, so its entries ride the marker
+                 * band; the boot seeded the array before this stage. */
+    static const int slots[] =
+    {
+#define USER32_CALLBACK_ENTRY(name) WINWEB_IP_User32##name,
+        ALL_USER32_CALLBACKS
+#undef USER32_CALLBACK_ENTRY
+    };
+    unsigned int i;
+    for (i = 0; i < ARRAY_SIZE( kernel_callback_table ); i++)
+    {
+        if (i < ARRAY_SIZE( slots ))
+            kernel_callback_table[i] = (KERNEL_CALLBACK_PROC)(UINT_PTR)wineweb_internal_procs[slots[i]];
+    }
+#endif
     NtCurrentTeb()->Peb->KernelCallbackTable = kernel_callback_table;
 }
 #endif

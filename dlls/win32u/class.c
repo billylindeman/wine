@@ -31,6 +31,9 @@
 #include "ntuser_private.h"
 #include "wine/server.h"
 #include "wine/debug.h"
+#ifdef __wasm__ /* wineweb: the internal-proc marker contract */
+#include "wineweb_internal.h"
+#endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(class);
 WINE_DECLARE_DEBUG_CHANNEL(win);
@@ -347,6 +350,43 @@ NTSTATUS WINAPI NtUserInitializeClientPfnArrays( const ntuser_client_func_ptr *c
         winproc_array[i].procA = client_procsA[i][0];
         winproc_array[i].procW = client_procsW[i][0];
     }
+#ifdef __wasm__ /* wineweb: the builtin identities are HostFn markers — the
+                 * winproc_array entries flow guest-visible (the dispatch's
+                 * procW, GetWindowLongPtr/GCLP_WNDPROC), so every one of
+                 * them rides the marker band; the boot seeded the array
+                 * before winproc_init ran (the stage order). The raw
+                 * funcref identities never dispatch. */
+    {
+        /* The winproc_array index (the NTUSER_WNDPROC_* enum) → the boot
+         * table's slot pair. UNKNOWN has no builtin proc (the client_procs
+         * table leaves it NULL) — skipped. */
+        static const struct { int a, w; } slots[NTUSER_NB_PROCS] =
+        {
+            [NTUSER_WNDPROC_SCROLLBAR]  = { WINWEB_IP_ScrollBarWndProcA, WINWEB_IP_ScrollBarWndProcW },
+            [NTUSER_WNDPROC_MESSAGE]    = { WINWEB_IP_MessageWndProcA,   WINWEB_IP_MessageWndProcW },
+            [NTUSER_WNDPROC_MENU]       = { WINWEB_IP_PopupMenuWndProcA, WINWEB_IP_PopupMenuWndProcW },
+            [NTUSER_WNDPROC_DESKTOP]    = { WINWEB_IP_DesktopWndProcA,   WINWEB_IP_DesktopWndProcW },
+            [NTUSER_WNDPROC_DEFWND]     = { WINWEB_IP_DefWindowProcA,    WINWEB_IP_DefWindowProcW },
+            [NTUSER_WNDPROC_ICONTITLE]  = { WINWEB_IP_IconTitleWndProcA, WINWEB_IP_IconTitleWndProcW },
+            [NTUSER_WNDPROC_BUTTON]     = { WINWEB_IP_ButtonWndProcA,    WINWEB_IP_ButtonWndProcW },
+            [NTUSER_WNDPROC_COMBO]      = { WINWEB_IP_ComboWndProcA,     WINWEB_IP_ComboWndProcW },
+            [NTUSER_WNDPROC_COMBOLBOX]  = { WINWEB_IP_ComboLBoxWndProcA, WINWEB_IP_ComboLBoxWndProcW },
+            [NTUSER_WNDPROC_DIALOG]     = { WINWEB_IP_DialogWndProcA,    WINWEB_IP_DialogWndProcW },
+            [NTUSER_WNDPROC_EDIT]       = { WINWEB_IP_EditWndProcA,      WINWEB_IP_EditWndProcW },
+            [NTUSER_WNDPROC_LISTBOX]    = { WINWEB_IP_ListBoxWndProcA,   WINWEB_IP_ListBoxWndProcW },
+            [NTUSER_WNDPROC_MDICLIENT]  = { WINWEB_IP_MDIClientWndProcA, WINWEB_IP_MDIClientWndProcW },
+            [NTUSER_WNDPROC_STATIC]     = { WINWEB_IP_StaticWndProcA,    WINWEB_IP_StaticWndProcW },
+            [NTUSER_WNDPROC_IME]        = { WINWEB_IP_ImeWndProcA,       WINWEB_IP_ImeWndProcW },
+            [NTUSER_WNDPROC_GHOST]      = { WINWEB_IP_GhostWndProcA,     WINWEB_IP_GhostWndProcW },
+        };
+        for (i = 0; i < NTUSER_NB_PROCS; i++)
+        {
+            if (slots[i].a < 0) continue; /* NTUSER_WNDPROC_UNKNOWN */
+            winproc_array[i].procA = (WNDPROC)(UINT_PTR)wineweb_internal_procs[slots[i].a];
+            winproc_array[i].procW = (WNDPROC)(UINT_PTR)wineweb_internal_procs[slots[i].w];
+        }
+    }
+#endif
     user32_module = user_module;
 
     pthread_once( &init_once, init_user );
