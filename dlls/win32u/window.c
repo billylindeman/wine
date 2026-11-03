@@ -101,13 +101,6 @@ HANDLE alloc_user_handle( void *ptr, unsigned short type )
     return handle;
 }
 
-/* wineweb: TEMPORARY Phase-0 probe (the builtin-proc identity hunt) —
- * reverted after the read. The window-handle read-back ring. */
-#ifdef __wasm__
-unsigned int wineweb_probe_id_winh_n;
-unsigned int wineweb_probe_id_winh_ring[16][2];
-#endif
-
 static BOOL is_valid_entry_uniq( HANDLE handle, unsigned short type, UINT64 uniq )
 {
     if (!HIWORD(handle) || HIWORD(handle) == 0xffff) return LOWORD(uniq) == type;
@@ -209,19 +202,6 @@ WNDPROC get_window_wndproc_handle( HWND hwnd, BOOL *ansi )
         wndproc = wine_server_get_ptr( window_shm->info.wndproc );
         *ansi = window_shm->ansi;
     }
-#ifdef __wasm__ /* wineweb: TEMPORARY Phase-0 probe — the handle the client reads back */
-    {
-        extern unsigned int wineweb_probe_id_winh_n;
-        extern unsigned int wineweb_probe_id_winh_ring[16][2];
-        unsigned int n = wineweb_probe_id_winh_n;
-        if (n < 16)
-        {
-            wineweb_probe_id_winh_ring[n][0] = (UINT_PTR)hwnd;
-            wineweb_probe_id_winh_ring[n][1] = (UINT_PTR)wndproc;
-        }
-        wineweb_probe_id_winh_n = n + 1;
-    }
-#endif
     if (status) return 0;
     return wndproc;
 }

@@ -422,12 +422,6 @@ static BOOL init_win_proc_params( struct win_proc_params *params, HWND hwnd, UIN
 
     user_check_not_lock();
 
-#ifdef __wasm__ /* wineweb: TEMPORARY Phase-0 probe — the resolution's input on SYSTIMER */
-    if (msg == WM_SYSTIMER)
-        ERR( "W8: init_win_proc_params SYSTIMER func %x hwnd %x\n",
-             (unsigned)(UINT_PTR)params->func, (unsigned)(UINT_PTR)hwnd );
-#endif
-
     params->hwnd = get_full_window_handle( hwnd );
     params->msg = msg;
     params->wparam = wparam;
@@ -471,19 +465,6 @@ extern unsigned int wineweb_guest_call( unsigned int proc, unsigned int hwnd, un
                                         unsigned int wparam, unsigned int lparam );
 #endif
 
-#ifdef __wasm__ /* wineweb: TEMPORARY Phase-0 probe — the dispatch's proc identity */
-unsigned int wineweb_probe_id_disp_n;
-unsigned int wineweb_probe_id_disp_ring[16][6]; /* {func, procW, msg, hwnd, proc, winproc_used} — CIRCULAR: the last 16 before the trap */
-unsigned int wineweb_probe_id_fill_addr; /* the last MSG the server's fill wrote */
-/* The guest's band esp (the marker's entry esp0 — the band lives at the
- * engine's BAND_BASE 0x01800000, gpr(4) = slot 4, u64 zero-extended). */
-unsigned int wineweb_probe_id_esp(void)
-{
-    extern unsigned int wineweb_probe_id_band_esp(void);
-    return wineweb_probe_id_band_esp();
-}
-#endif
-
 static LRESULT dispatch_win_proc_params( struct win_proc_params *params, size_t size,
                                          void **client_ret, size_t *client_ret_size )
 {
@@ -517,35 +498,11 @@ static LRESULT dispatch_win_proc_params( struct win_proc_params *params, size_t 
          * corridor end) or a builtin's wasm function pointer — those are
          * small table indices in this toolchain (the W8 run-13 evidence: a
          * builtin proc fed to wineweb_guest_call lifted garbage). */
-        {
-            extern unsigned int wineweb_probe_id_disp_n;
-            extern unsigned int wineweb_probe_id_disp_ring[16][6];
-            extern unsigned int wineweb_probe_id_pfn_used;
-            unsigned int n = wineweb_probe_id_disp_n;
-            {
-                unsigned int slot = n % 16;
-                wineweb_probe_id_disp_ring[slot][0] = (UINT_PTR)params->func;
-                wineweb_probe_id_disp_ring[slot][1] = (UINT_PTR)params->procW;
-                wineweb_probe_id_disp_ring[slot][2] = params->msg;
-                wineweb_probe_id_disp_ring[slot][3] = (UINT_PTR)params->hwnd;
-                wineweb_probe_id_disp_ring[slot][4] = (unsigned)proc;
-                wineweb_probe_id_disp_ring[slot][5] = wineweb_probe_id_pfn_used;
-            }
-            wineweb_probe_id_disp_n = n + 1;
-        }
         if (proc >= 0x400000u && proc < 0x20000000u)
             result = wineweb_guest_call( (unsigned)proc, (unsigned)(UINT_PTR)params->hwnd,
                                          params->msg, params->wparam, params->lparam );
         else
-        {
-#ifdef __wasm__ /* wineweb: TEMPORARY Phase-0 probe — name the indirect call's proc */
-            if ((proc >= 0x20000000u) || (proc >= 3267u && proc < 0x400000u))
-                ERR( "W8: dispatch INDIRECT proc %x (func %x) msg %u hwnd %x — not a funcref index\n",
-                     (unsigned)proc, (unsigned)(UINT_PTR)params->func, params->msg,
-                     (unsigned)(UINT_PTR)params->hwnd );
-#endif
             result = ((WNDPROC)proc)( params->hwnd, params->msg, params->wparam, params->lparam );
-        }
     }
     thread_info->msg_call_depth--;
     return result;
@@ -3099,12 +3056,6 @@ static int peek_message( MSG *msg, const struct peek_message_filter *filter )
                 info.msg.pt.x    = reply->x;
                 info.msg.pt.y    = reply->y;
                 hw_id            = 0;
-#ifdef __wasm__ /* wineweb: TEMPORARY Phase-0 probe — the reply's own values on SYSTIMER */
-                if (reply->msg == WM_SYSTIMER)
-                    ERR( "W8: peek reply SYSTIMER win %x wp %x lp %x type %d\n",
-                         (unsigned)reply->win, (unsigned)reply->wparam,
-                         (unsigned)reply->lparam, reply->type );
-#endif
             }
             else buffer_size = reply->total;
         }
@@ -3321,12 +3272,6 @@ static int peek_message( MSG *msg, const struct peek_message_filter *filter )
             }
             *msg = info.msg;
             msg->pt = point_phys_to_win_dpi( info.msg.hwnd, info.msg.pt );
-#ifdef __wasm__ /* wineweb: TEMPORARY Phase-0 probe — the fill's address, remembered */
-            {
-                extern unsigned int wineweb_probe_id_fill_addr;
-                wineweb_probe_id_fill_addr = (UINT_PTR)msg;
-            }
-#endif
             thread_info->message_pos   = MAKELONG( msg->pt.x, msg->pt.y );
             thread_info->message_time  = info.msg.time;
             thread_info->message_extra = 0;
