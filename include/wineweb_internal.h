@@ -80,7 +80,7 @@ enum wineweb_internal_slot
     WINWEB_IP_WDML_EventProc,
     WINWEB_IP_WDML_ServerNameProc,
     WINWEB_IP_WDML_ServerConvProc,
-    WINWEB_IP_CallbackFirst, /* the User32* KernelCallbackTable entries ride below */
+    /* The KernelCallbackTable's User32* entries (ALL_USER32_CALLBACKS order). */
     WINWEB_IP_User32CallDispatchCallback,
     WINWEB_IP_User32CallEnumDisplayMonitor,
     WINWEB_IP_User32CallSendAsyncCallback,
@@ -109,7 +109,10 @@ enum wineweb_internal_slot
 
     WINWEB_IP_COUNT
 };
-#define WINWEB_INTERNAL_PROC_COUNT ((unsigned int)WINWEB_IP_COUNT)
+/* The literal the rex boot's drift test parses (the lockstep pin);
+ * C_ASSERTed against the enum so the two cannot diverge. */
+#define WINWEB_INTERNAL_PROC_COUNT 61u
+C_ASSERT( WINWEB_IP_COUNT == WINWEB_INTERNAL_PROC_COUNT );
 
 /* The boot-seeded marker array (defined in dlls/user32/winproc.c — the
  * trampolines' TU). Filled by the boot before stage USER32; the sites
