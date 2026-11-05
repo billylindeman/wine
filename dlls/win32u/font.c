@@ -6760,11 +6760,7 @@ UINT font_init(void)
                  * non-wasm path derives stay at the 96 the stock objects
                  * were built with. */
     if (!(font_funcs = init_freetype_lib()))
-    {
-        WARN( "wineweb: the freetype backend failed to init — the 8x8 bitmap backend is the fallback\n" );
-        font_funcs = init_wineweb_font_lib();
-    }
-    if (!font_funcs) return 96;
+        return 96;
     load_registry_fonts();
     load_gdi_font_subst();
     reorder_font_list();
@@ -6775,8 +6771,6 @@ UINT font_init(void)
          * degrade. A zero-face list leaves the caret's line_height at 0
          * (EDIT_CharFromPos's division) and every text request unanswered
          * — the bitmap backend is the honest floor, not a crash. */
-        WARN( "wineweb: the scalable tier added no faces — the 8x8 bitmap backend is the fallback\n" );
-        font_funcs = init_wineweb_font_lib();
     }
     if (!font_funcs) return 96;
     font_funcs->load_fonts();
