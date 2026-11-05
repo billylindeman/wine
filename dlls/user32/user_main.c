@@ -68,29 +68,7 @@ static NTSTATUS WINAPI User32DrawText( void *args, ULONG size )
 
     size -= FIELD_OFFSET( struct draw_text_params, str );
     result.rect = params->rect;
-#ifdef __wasm__ /* wineweb: user32's DrawTextW is shadowed by win32u's in the
-                 * unified archive (--allow-multiple-definition picks the
-                 * first definition), and win32u's DrawTextW rides THIS
-                 * callback — call the engine directly to keep the native
-                 * chain (win32u DrawTextW -> KeUserModeCallback -> user32
-                 * engine) from recursing. The DT_TABSTOP shift is
-                 * user32's own DrawTextW wrapper, kept verbatim. */
-    {
-        DRAWTEXTPARAMS dtp;
-        UINT flags = params->flags;
-        memset( &dtp, 0, sizeof(dtp) );
-        dtp.cbSize = sizeof(dtp);
-        if (flags & DT_TABSTOP)
-        {
-            dtp.iTabLength = (flags >> 8) & 0xff;
-            flags &= 0xffff00ff;
-        }
-        result.height = DrawTextExW( params->hdc, (LPWSTR)params->str, size / sizeof(WCHAR),
-                                     &result.rect, flags, &dtp );
-    }
-#else
     result.height = DrawTextW( params->hdc, params->str, size / sizeof(WCHAR), &result.rect, params->flags );
-#endif
     return NtCallbackReturn( &result, sizeof(result), STATUS_SUCCESS );
 }
 
