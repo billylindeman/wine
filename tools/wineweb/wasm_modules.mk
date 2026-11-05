@@ -61,9 +61,11 @@ WINEWEB_ALWAYS_EXPORTS := __wasm_call_ctors __stack_pointer __wine_current_teb
 # One rule per DLL, from the generated file's own module list. The staticlib
 # and winecrt0 are wine's own make targets — a stale archive rebuilds and
 # the module relinks (make IS the mtime-aware freshness gate; the C5b
-# existence-only false-green class cannot return through this rule).
+# existence-only false-green class cannot return through this rule). The
+# target IS the output path ($(WINEWEB_OUT)/wineweb-<dll>.wasm): make's
+# up-to-date check must see the file it compares against.
 define WINEMAKE_module_rule
-wineweb-$(1).wasm: dlls/$(1)/lib$(1).a libs/winecrt0/libwinecrt0.a \
+$$(WINEWEB_OUT)/wineweb-$(1).wasm: dlls/$(1)/lib$(1).a libs/winecrt0/libwinecrt0.a \
   $$(WINEWEB_VARS) $$(WINEWEB_$(1)_PREREQS)
 	@mkdir -p $$(WINEWEB_OUT)
 	@echo '  WINEMAKE  $$@ (the wasm module flavor)'
@@ -79,7 +81,7 @@ wineweb-$(1).wasm: dlls/$(1)/lib$(1).a libs/winecrt0/libwinecrt0.a \
 	  fi; \
 	done
 	@SPEC_EXPORTS=$$$$($(WINEWEB_SPEC_EXPORTS_SH) $(srcdir)/dlls/$(1)/$(1).spec $$(if $$(WINEWEB_$(1)_SKIP_EXPORTS),--skip=$$(WINEWEB_$(1)_SKIP_EXPORTS))) || exit 1; \
-	$(CC) $(TARGETFLAGS) -nostdlib -o $$(WINEWEB_OUT)/$$@ \
+	$(CC) $(TARGETFLAGS) -nostdlib -o $$@ \
 	  -Wl,--no-entry -Wl,--allow-undefined -Wl,--import-table -Wl,--no-stack-first \
 	  $$(WINEWEB_ALLOW_MULTI_DEF) \
 	  $$(WINEWEB_$(1)_WRAP_FLAGS) \
@@ -100,7 +102,7 @@ endef
 $(foreach d,$(WINEWEB_DLLS),$(eval $(call WINEMAKE_module_rule,$(d))))
 
 # The aggregate: every module in the generated file's list, in one make.
-wineweb-modules: $(foreach d,$(WINEWEB_DLLS),wineweb-$(d).wasm)
+wineweb-modules: $(foreach d,$(WINEWEB_DLLS),$(WINEWEB_OUT)/wineweb-$(d).wasm)
 ifeq ($(strip $(WINEWEB_DLLS)),)
 	@echo "ERROR: wineweb-modules requires the generated per-DLL variables file — pass WINEWEB_VARS=<file> (wineweb's gen-wasm-vars writes it)"; exit 1
 else
@@ -111,6 +113,6 @@ endif
 # The module artifacts are wineweb's product inputs — wine's own `clean`
 # does not know them; this removes them wherever WINEWEB_OUT points.
 wineweb-clean:
-	@rm -f $(addprefix $(WINEWEB_OUT)/,$(foreach d,$(WINEWEB_DLLS),wineweb-$(d).wasm))
+	@rm -f $(foreach d,$(WINEWEB_DLLS),$(WINEWEB_OUT)/wineweb-$(d).wasm)
 	@echo 'wineweb: module artifacts removed from $(WINEWEB_OUT)'
 .PHONY: wineweb-clean
