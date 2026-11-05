@@ -2575,6 +2575,16 @@ static void EDIT_EM_ReplaceSel(EDITSTATE *es, BOOL can_undo, const WCHAR *lpsz_r
 	LPWSTR buf = NULL;
 	UINT bufl;
 
+	/* Evidence channel (docs/04 §4, the A2b contract — one channel, every
+	 * tenant): boot-driver.mjs's T5 completion-chain leg and its
+	 * "no empty re-set" negative both read this line from the ordered
+	 * log array ("EDIT_EM_ReplaceSel len=5 first=68 tl=5" — the proof
+	 * the filled IOSB reached the edit end-to-end). Classified by the
+	 * audit as probe family but CONTRACT, not cruft; restored by block
+	 * C5b. The rest of the W8 family stays deleted. */
+	ERR( "W8: EDIT_EM_ReplaceSel len=%u first=%x tl=%u\n", strl,
+	     strl ? (unsigned)lpsz_replace[0] : 0, tl );
+
 	TRACE("%s, can_undo %d, send_update %d\n",
 	    debugstr_wn(lpsz_replace, strl), can_undo, send_update);
 
@@ -3780,6 +3790,23 @@ static void EDIT_WM_Paint(EDITSTATE *es, HDC hdc)
 	if (!es->bEnableState)
 		SetTextColor(dc, GetSysColor(COLOR_GRAYTEXT));
 	GetClipBox(dc, &rcRgn);
+	/* Evidence channel (docs/04 §4, the A2b contract — one channel,
+	 * every tenant): boot-driver.mjs's C2 11-line-paint leg reads this
+	 * line from the ordered log array ("EDIT paint loop" +
+	 * "line_count=11" — the proof the multi-Enter session's state
+	 * reached the paint). Classified by the audit as probe family but
+	 * CONTRACT, not cruft; restored by block C5b. The rest of the W8
+	 * family stays deleted. */
+	{
+		__attribute__((import_module("wineweb_host"), import_name("log")))
+		extern void wineweb_host_log(int level, const char *ptr, unsigned len);
+		char dbg[96];
+		int vlc = (es->style & ES_MULTILINE) ? get_vertical_line_count(es) : 1;
+		int n = __builtin_snprintf(dbg, sizeof(dbg),
+			"W8: EDIT paint loop vlc=%d line_count=%d y_off=%d line_h=%d\n",
+			vlc, es->line_count, es->y_offset, es->line_height);
+		wineweb_host_log(0, dbg, n);
+	}
 	if (es->style & ES_MULTILINE) {
 		INT vlc = get_vertical_line_count(es);
 		for (i = es->y_offset ; i <= min(es->y_offset + vlc, es->y_offset + es->line_count - 1) ; i++) {
