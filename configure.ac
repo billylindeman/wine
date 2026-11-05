@@ -3798,6 +3798,17 @@ dlls/wineandroid.drv/wine-debug.apk: dlls/wineandroid.drv/build.gradle ${wine_sr
 	cd dlls/wineandroid.drv && env ANDROID_HOME=\"\$(ANDROID_HOME)\" \$(GRADLE) -q -Psrcdir=$srcdir assembleDebug
 	mv dlls/wineandroid.drv/build/outputs/apk/debug/wine-debug.apk \$[@]])
 
+dnl The wineweb wasm-builtin module flavor (ADR-0014 B1): the per-DLL
+dnl wineweb-<dll>.wasm artifacts ride wine's own make (its staticlibs,
+dnl winecrt0, its .spec machinery) — the rules live in the fork's
+dnl tools/wineweb/wasm_modules.mk; the wineweb side passes its placement
+dnl and wiring contracts per DLL as make variables (WINEWEB_VARS). A plain
+dnl `make` never needs the file: only the wineweb targets consume it, and
+dnl they fail loud when the generated variables are absent.
+
+WINE_APPEND_RULE(
+[-include ${wine_srcdir}tools/wineweb/wasm_modules.mk])
+
 dnl Misc rules
 
 AC_SUBST([EXTERNAL_SUBDIRS],["_AC_EXTERNAL_SUBDIRS"])

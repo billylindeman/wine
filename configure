@@ -23371,6 +23371,10 @@ dlls/wineandroid.drv/wine-debug.apk: dlls/wineandroid.drv/build.gradle ${wine_sr
 	mv dlls/wineandroid.drv/build/outputs/apk/debug/wine-debug.apk \$@"
 
 
+as_fn_append wine_rules "
+-include ${wine_srcdir}tools/wineweb/wasm_modules.mk"
+
+
 EXTERNAL_SUBDIRS="libs/capstone libs/c++ libs/c++abi libs/faudio libs/ffmpeg libs/fluidsynth libs/gsm libs/icucommon libs/icui18n libs/jpeg libs/jxr libs/lcms2 libs/ldap libs/mpg123 libs/musl libs/png libs/sqlite3 libs/symcrypt libs/tiff libs/unwind libs/vkd3d libs/xml2 libs/xslt libs/zlib libs/compiler-rt"
 
 TAGSFLAGS="--langmap='c:+.idl.l.rh,make:(Make*.in)'"
