@@ -51,6 +51,13 @@ WINEWEB_OUT ?= .
 # The spec → export-flags tool (the fork's own .spec machinery).
 WINEWEB_SPEC_EXPORTS_SH := $(srcdir)/tools/wineweb/spec-exports.sh
 
+# The every-module hard exports: the ctor entry the embedder drives, the
+# link-owned stack global (wasm-ld synthesizes it; the boot rewrites it
+# between instantiation and __wasm_call_ctors), and the module-resident
+# __wine_current_teb (the teb-def def the boot writes through the
+# exported address). A1/A2's recipe hard-exported the trio on every line.
+WINEWEB_ALWAYS_EXPORTS := __wasm_call_ctors __stack_pointer __wine_current_teb
+
 # One rule per DLL, from the generated file's own module list. The staticlib
 # and winecrt0 are wine's own make targets — a stale archive rebuilds and
 # the module relinks (make IS the mtime-aware freshness gate; the C5b
@@ -71,7 +78,7 @@ wineweb-$(1).wasm: dlls/$(1)/lib$(1).a libs/winecrt0/libwinecrt0.a \
 	    echo "ERROR: hard export '$$$$n' is not defined in dlls/$(1)/lib$(1).a (nor the seam objects) — the crossing surface drifted"; exit 1; \
 	  fi; \
 	done
-	@SPEC_EXPORTS=$$($(WINEWEB_SPEC_EXPORTS_SH) $(srcdir)/dlls/$(1)/$(1).spec $$(if $$(WINEWEB_$(1)_SKIP_EXPORTS),--skip=$$(WINEWEB_$(1)_SKIP_EXPORTS))) || exit 1; \
+	@SPEC_EXPORTS=$$$$($(WINEWEB_SPEC_EXPORTS_SH) $(srcdir)/dlls/$(1)/$(1).spec $$(if $$(WINEWEB_$(1)_SKIP_EXPORTS),--skip=$$(WINEWEB_$(1)_SKIP_EXPORTS))) || exit 1; \
 	$(CC) $(TARGETFLAGS) -nostdlib -o $$(WINEWEB_OUT)/$$@ \
 	  -Wl,--no-entry -Wl,--allow-undefined -Wl,--import-table -Wl,--no-stack-first \
 	  $$(WINEWEB_ALLOW_MULTI_DEF) \
@@ -81,6 +88,7 @@ wineweb-$(1).wasm: dlls/$(1)/lib$(1).a libs/winecrt0/libwinecrt0.a \
 	  -Wl,-z,stack-size=$$(WINEWEB_MODULE_STACK) \
 	  -Xlinker $$(WINEWEB_IMPORT_MEMORY) \
 	  $$(foreach n,$$(WINEWEB_$(1)_HARD_EXPORTS),-Wl,--export=$$(n)) \
+	  $$(foreach n,$$(WINEWEB_ALWAYS_EXPORTS),-Wl,--export=$$(n)) \
 	  $$$${SPEC_EXPORTS} \
 	  $$(WINEWEB_$(1)_PRE_OBJECTS) \
 	  dlls/$(1)/lib$(1).a \
