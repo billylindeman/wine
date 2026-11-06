@@ -41,4 +41,3 @@ SOURCES = \
 	libs/vkd3d/state.c \
 	libs/vkd3d/utils.c \
 	libs/vkd3d/vkd3d_main.c \
-	wasm_shim.c
