@@ -25,3 +25,4 @@ SOURCES = \
 	linker.c \
 	reflection.c \
 	utils.c \
+	wasm_shim.c
