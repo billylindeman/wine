@@ -910,6 +910,11 @@ struct directory_entry
 {
     data_size_t name_len;
     data_size_t type_len;
+    /* wineweb: the mount's real byte count (the P30k metadata-fidelity
+     * thread — the miniserver's op-242 serve threads the VFS mount's
+     * DirEntry::size through; the wasm linear memory bounds it below
+     * 4GiB). The file TIMES have no mount source — the honest zeros. */
+    data_size_t size;
     /* VARARG(name,unicode_str,name_len); */
     /* VARARG(type,unicode_str,type_len); */
 };

@@ -894,6 +894,13 @@ struct directory_entry
 {
     data_size_t name_len;
     data_size_t type_len;
+    /* wineweb: the mount's real byte count (the P30k metadata-fidelity
+     * thread — the miniserver's op-242 serve threads the VFS mount's
+     * DirEntry::size through). data_size_t carries it: the mount is a
+     * wasm linear memory, so a size >= 4GiB cannot exist. The honest
+     * absence is the file TIMES — the mount's records carry no source
+     * for them (the ledger's named-absent rows). */
+    data_size_t size;
 
 
 };
