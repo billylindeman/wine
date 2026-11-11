@@ -2438,29 +2438,23 @@ static NTSTATUS get_mountmgr_fs_info( HANDLE handle, int fd, struct mountmgr_uni
 
 
 /***********************************************************************
- *           get_dir_data_entry
+ *           get_dir_data_entry_ex
  *
- * Return a directory entry from the cached data.
+ * Return a directory entry from the cached data, with the stat result
+ * supplied by the caller (the fd-less arms — see server_query_directory_file —
+ * cannot stat; their st carries the honest zeros and their attributes the
+ * kind→attribute map).
  */
-static NTSTATUS get_dir_data_entry( struct dir_data *dir_data, void *info_ptr, IO_STATUS_BLOCK *io,
-                                    ULONG max_length, FILE_INFORMATION_CLASS class,
-                                    union file_directory_info **last_info )
+static NTSTATUS get_dir_data_entry_ex( struct dir_data *dir_data, void *info_ptr, IO_STATUS_BLOCK *io,
+                                       ULONG max_length, FILE_INFORMATION_CLASS class,
+                                       union file_directory_info **last_info,
+                                       const struct stat *st_in, ULONG attributes )
 {
     const struct dir_data_names *names = &dir_data->names[dir_data->pos];
     union file_directory_info *info;
-    struct stat st;
-    ULONG name_len, start, dir_size, attributes, reparse_tag;
+    struct stat st = *st_in;
+    ULONG name_len, start, dir_size, reparse_tag = 0;
 
-    if (get_file_info( names->unix_name, &st, &attributes, &reparse_tag ) == -1)
-    {
-        TRACE( "file no longer exists %s\n", debugstr_a(names->unix_name) );
-        return STATUS_SUCCESS;
-    }
-    if (is_ignored_file( &st ))
-    {
-        TRACE( "ignoring file %s\n", debugstr_a(names->unix_name) );
-        return STATUS_SUCCESS;
-    }
     start = dir_info_align( io->Information );
     dir_size = dir_info_size( class, 0 );
     if (start + dir_size > max_length) return STATUS_MORE_ENTRIES;
@@ -2541,6 +2535,33 @@ static NTSTATUS get_dir_data_entry( struct dir_data *dir_data, void *info_ptr, I
     if (*last_info) (*last_info)->next = (char *)info - (char *)*last_info;
     *last_info = info;
     return name_len > max_length ? STATUS_BUFFER_OVERFLOW : STATUS_SUCCESS;
+}
+
+/***********************************************************************
+ *           get_dir_data_entry
+ *
+ * Return a directory entry from the cached data: stat the file, then the
+ * shared fill (get_dir_data_entry_ex).
+ */
+static NTSTATUS get_dir_data_entry( struct dir_data *dir_data, void *info_ptr, IO_STATUS_BLOCK *io,
+                                    ULONG max_length, FILE_INFORMATION_CLASS class,
+                                    union file_directory_info **last_info )
+{
+    const struct dir_data_names *names = &dir_data->names[dir_data->pos];
+    struct stat st;
+    ULONG attributes, reparse_tag;
+
+    if (get_file_info( names->unix_name, &st, &attributes, &reparse_tag ) == -1)
+    {
+        TRACE( "file no longer exists %s\n", debugstr_a(names->unix_name) );
+        return STATUS_SUCCESS;
+    }
+    if (is_ignored_file( &st ))
+    {
+        TRACE( "ignoring file %s\n", debugstr_a(names->unix_name) );
+        return STATUS_SUCCESS;
+    }
+    return get_dir_data_entry_ex( dir_data, info_ptr, io, max_length, class, last_info, &st, attributes );
 }
 
 #ifdef VFAT_IOCTL_READDIR_BOTH
@@ -2876,6 +2897,366 @@ static unsigned int get_cached_dir_data( HANDLE handle, struct dir_data **data_r
 }
 
 
+#ifdef __wasm__ /* wineweb: the server-held dir-handle arm (the P23 dir layer's client side) */
+
+/* The per-handle dir_data cache for server-held directory handles: the
+ * server's get_directory_cache_entry (op 49) has no dispatch handler on the
+ * wineweb wire, so the client keeps its own 16-entry cache keyed by the
+ * handle. Each entry carries a per-name attribute array — the mount's
+ * records carry kind+name only, so the kind→attribute fill is decided at
+ * enumeration time (Directory → FILE_ATTRIBUTE_DIRECTORY, File →
+ * FILE_ATTRIBUTE_ARCHIVE, get_file_attributes's shape) and the times/sizes
+ * stay honest zeros. */
+struct server_dir_cache_entry
+{
+    HANDLE handle;               /* the server-held dir handle */
+    struct dir_data *data;       /* the cached entries */
+    ULONG *attributes;           /* per-entry kind→attribute map */
+};
+
+#define SERVER_DIR_CACHE_SIZE 16
+
+static struct server_dir_cache_entry server_dir_cache[SERVER_DIR_CACHE_SIZE];
+static unsigned int server_dir_cache_next;
+
+/* a decoded wire entry, held for the name_compare sort before the dir_data
+ * append (the attributes must sort in lockstep with the names) */
+struct server_wire_entry
+{
+    WCHAR *name;                 /* the UTF-16 name (owned) */
+    WCHAR short_name[13];        /* the generated short name, if any */
+    ULONG attr;                  /* the kind→attribute map's fill */
+};
+
+static int server_wire_entry_compare( const void *a, const void *b )
+{
+    const struct server_wire_entry *file_a = (const struct server_wire_entry *)a;
+    const struct server_wire_entry *file_b = (const struct server_wire_entry *)b;
+    int ret = wcsicmp( file_a->name, file_b->name );
+    if (!ret) ret = wcscmp( file_a->name, file_b->name );
+    return ret;
+}
+
+/* free a cache slot's contents */
+static void server_dir_cache_free( struct server_dir_cache_entry *entry )
+{
+    if (entry->data) free_dir_data( entry->data );
+    free( entry->attributes );
+    entry->data = NULL;
+    entry->attributes = NULL;
+}
+
+/* find the cache slot for a handle, evicting round-robin on a miss */
+static struct server_dir_cache_entry *server_dir_cache_get( HANDLE handle )
+{
+    struct server_dir_cache_entry *entry;
+    unsigned int i;
+
+    for (i = 0; i < SERVER_DIR_CACHE_SIZE; i++)
+        if (server_dir_cache[i].data && server_dir_cache[i].handle == handle)
+            return &server_dir_cache[i];
+
+    entry = &server_dir_cache[server_dir_cache_next++ % SERVER_DIR_CACHE_SIZE];
+    server_dir_cache_free( entry );
+    entry->handle = handle;
+    return entry;
+}
+
+/* fill a cache entry's dir_data from the wire's get_directory_entries
+ * (op 242): the reply's struct directory_entry array (server_protocol.h:893
+ * — name_len + type_len byte counts, then the name and the type name as
+ * UTF-16), decoded with the namespace client's walk (NtQueryDirectoryObject's
+ * shape). The mask applies with append_entry's rule; the fill mirrors
+ * init_cached_dir_data's postlude (the sort, the mask copy) minus the
+ * fstat — a server-held mount carries no identity to stat. */
+static NTSTATUS server_fill_dir_data( HANDLE handle, struct server_dir_cache_entry *entry,
+                                      const UNICODE_STRING *mask )
+{
+    struct dir_data *data;
+    struct server_wire_entry *wire = NULL;
+    unsigned int wire_size = 0, wire_count = 0, dir_type_len;
+    ULONG *attributes = NULL;
+    char *entries = NULL;
+    data_size_t size = 64 * 1024;
+    unsigned int count, decoded, i, pos, reply_size, status;
+    static const WCHAR directory_typeW[] = {'D','i','r','e','c','t','o','r','y',0};
+
+    dir_type_len = wcslen( directory_typeW );
+
+    if (!(data = calloc( 1, sizeof(*data) ))) return STATUS_NO_MEMORY;
+
+    for (;;)
+    {
+        count = decoded = 0;
+        for (i = 0; i < wire_count; i++) free( wire[i].name );
+        wire_count = 0;
+        free( entries );
+        if (!(entries = malloc( size )))
+        {
+            free_dir_data( data );
+            return STATUS_NO_MEMORY;
+        }
+
+        SERVER_START_REQ( get_directory_entries )
+        {
+            req->handle = wine_server_obj_handle( handle );
+            req->index  = 0;
+            req->max_count = UINT_MAX;
+            wine_server_set_reply( req, entries, size );
+            status = wine_server_call( req );
+            count = reply->count;
+            reply_size = wine_server_reply_size( reply );
+        }
+        SERVER_END_REQ;
+
+
+        if (status && status != STATUS_MORE_ENTRIES)
+        {
+            free( entries );
+            free_dir_data( data );
+            return status;
+        }
+
+        /* decode the vararg; a count the reply couldn't carry means the
+         * copy was clamped — grow once and re-request (index 0 restarts) */
+        for (i = 0, pos = 0; i < count; i++)
+        {
+            const struct directory_entry *dir_entry;
+            const WCHAR *nameW, *typeW;
+            struct server_wire_entry *cur;
+            unsigned int name_len, type_len, entry_size, short_len = 0;
+            char *unix_name;
+            int unix_len;
+
+            if (pos + sizeof(*dir_entry) > reply_size) break;
+            dir_entry = (const struct directory_entry *)(entries + pos);
+            entry_size = sizeof(*dir_entry) + ((dir_entry->name_len + dir_entry->type_len + 3) & ~3);
+            if (pos + entry_size > reply_size) break;
+            nameW = (const WCHAR *)(dir_entry + 1);
+            typeW = (const WCHAR *)((char *)(dir_entry + 1) + dir_entry->name_len);
+            name_len = dir_entry->name_len / sizeof(WCHAR);
+            type_len = dir_entry->type_len / sizeof(WCHAR);
+
+            /* skip "." and ".." (the honest mount carries none, but the
+             * rule is init_cached_dir_data's) */
+            if (name_len && name_len <= 2 && nameW[0] == '.' && (name_len == 1 || nameW[1] == '.'))
+            {
+                pos += entry_size;
+                decoded++;
+                continue;
+            }
+
+            /* grow the wire array (a count-only bound; the entries are
+             * append-only within one decode pass) */
+            if (wire_count >= wire_size)
+            {
+                unsigned int new_size = max( wire_size * 2, 64 );
+                struct server_wire_entry *new_wire = realloc( wire, new_size * sizeof(*new_wire) );
+                if (!new_wire) goto oom;
+                wire = new_wire;
+                wire_size = new_size;
+            }
+            cur = &wire[wire_count];
+
+            if (!(cur->name = malloc( (name_len + 1) * sizeof(WCHAR) ))) goto oom;
+            memcpy( cur->name, nameW, name_len * sizeof(WCHAR) );
+            cur->name[name_len] = 0;
+
+            if (!is_legal_8dot3_name( cur->name, name_len ))
+                short_len = hash_short_file_name( cur->name, name_len, cur->short_name );
+            cur->short_name[short_len] = 0;
+            wcsupr( cur->short_name );
+
+            /* append_entry's mask rule: the long name first, then the
+             * generated short name */
+            if (mask && !match_filename( cur->name, name_len, mask ))
+            {
+                if (!short_len || !match_filename( cur->short_name, short_len, mask ))
+                {
+                    free( cur->name );
+                    pos += entry_size;
+                    decoded++;
+                    continue;
+                }
+            }
+
+            /* the kind→attribute map (get_file_attributes's shape): the
+             * type name is the object type ("Directory"/"File") */
+            if (type_len == dir_type_len && !wcsnicmp( typeW, directory_typeW, dir_type_len ))
+                cur->attr = FILE_ATTRIBUTE_DIRECTORY;
+            else
+                cur->attr = FILE_ATTRIBUTE_ARCHIVE;
+
+            wire_count++;
+            pos += entry_size;
+            decoded++;
+        }
+
+        if (decoded == count) break;
+        if (size >= 4 * 1024 * 1024)
+        {
+            for (i = 0; i < wire_count; i++) free( wire[i].name );
+            free( wire );
+            free( entries );
+            free_dir_data( data );
+            return STATUS_NO_MEMORY;
+        }
+        size *= 4;
+    }
+
+    free( entries );
+    entries = NULL;
+
+    /* sort the names (name_compare's shape); the mount carries no "." or
+     * ".." (skipped at decode), so the sort covers all entries and the
+     * attributes follow their entries' permutation */
+    qsort( wire, wire_count, sizeof(*wire), server_wire_entry_compare );
+
+    if (!(attributes = malloc( wire_count * sizeof(*attributes) )))
+    {
+        for (i = 0; i < wire_count; i++) free( wire[i].name );
+        free( wire );
+        free_dir_data( data );
+        return STATUS_NO_MEMORY;
+    }
+
+    for (i = 0; i < wire_count; i++)
+    {
+        char *unix_name;
+        int unix_len;
+
+        if (!(unix_name = malloc( wcslen( wire[i].name ) * 4 + 1 ))) goto oom;
+        unix_len = ntdll_wcstoumbs( wire[i].name, wcslen( wire[i].name ), unix_name,
+                                    wcslen( wire[i].name ) * 4 + 1, TRUE );
+        if (unix_len >= 0) unix_name[unix_len] = 0;
+        else unix_name[0] = 0;
+
+        attributes[i] = wire[i].attr;
+        if (!add_dir_data_names( data, wire[i].name, wire[i].short_name, unix_name ))
+        {
+            free( unix_name );
+            goto oom;
+        }
+        free( unix_name );
+    }
+    for (i = 0; i < wire_count; i++) free( wire[i].name );
+    free( wire );
+
+    if (mask)
+    {
+        data->mask.Length = data->mask.MaximumLength = mask->Length;
+        if (!(data->mask.Buffer = malloc( mask->Length )))
+        {
+            free( attributes );
+            free_dir_data( data );
+            return STATUS_NO_MEMORY;
+        }
+        memcpy( data->mask.Buffer, mask->Buffer, mask->Length );
+    }
+
+    TRACE( "server dir mask %s found %u files\n", debugstr_us( mask ), data->count );
+    entry->attributes = attributes;
+    entry->data = data;
+    return data->count ? STATUS_SUCCESS : STATUS_NO_SUCH_FILE;
+
+oom:
+    free( entries );
+    for (i = 0; i < wire_count; i++) free( wire[i].name );
+    free( wire );
+    free( attributes );
+    free_dir_data( data );
+    return STATUS_NO_MEMORY;
+}
+
+/* NtQueryDirectoryFile's arm for server-held dir handles: the VfsDir record
+ * (file.c:255's route) has no unix fd, so the enumeration rides the wire's
+ * get_directory_entries (op 242 — the serve exists, the mount's children
+ * through the seam's list, the P23 ledger). The mask matching and the
+ * info-class fill run unchanged: this sources get_dir_data_entry_ex's
+ * dir_data from the wire instead of the fd's readdir. */
+static NTSTATUS server_query_directory_file( HANDLE handle, IO_STATUS_BLOCK *io, void *buffer, ULONG length,
+                                             FILE_INFORMATION_CLASS info_class, BOOLEAN single_entry,
+                                             UNICODE_STRING *mask, BOOLEAN restart_scan )
+{
+    struct server_dir_cache_entry *entry;
+    union file_directory_info *last_info = NULL;
+    unsigned int status = STATUS_SUCCESS;
+    BOOLEAN fresh;
+    struct stat st;
+
+    io->Information = 0;
+    if (mask && mask->Length == 0) mask = NULL;
+
+    mutex_lock( &dir_mutex );
+
+    if (!(entry = server_dir_cache_get( handle )))
+    {
+        mutex_unlock( &dir_mutex );
+        return STATUS_NO_MEMORY;
+    }
+
+    fresh = !entry->data;
+    if (entry->data && restart_scan && mask && !ustring_equal( &entry->data->mask, mask ))
+    {
+        TRACE( "invalidating existing server cache entry for handle %p\n", handle );
+        server_dir_cache_free( entry );
+        fresh = TRUE;
+    }
+    /* the reused-handle guard: the table allocates lowest-free-slot (the
+     * HandleTable's own comment), so a handle value can outlive its cache
+     * entry's dir — and the client has no close notification. A restart on
+     * an exhausted cached entry is exactly the reuse shape (a fresh
+     * FindFirstFileW answers NO_MORE_FILES from a stale pos), so the
+     * restart re-asks the wire; a continuation keeps the cache. */
+    if (entry->data && restart_scan && entry->data->pos >= entry->data->count)
+    {
+        TRACE( "refilling exhausted server cache entry for handle %p\n", handle );
+        server_dir_cache_free( entry );
+        fresh = TRUE;
+    }
+
+    if (!entry->data)
+    {
+        status = server_fill_dir_data( handle, entry, mask );
+        if (status && status != STATUS_NO_SUCH_FILE)
+        {
+            mutex_unlock( &dir_mutex );
+            return status;
+        }
+        /* get_cached_dir_data's rule: a continuation past an empty listing
+         * is NO_MORE_FILES; a fresh one keeps NO_SUCH_FILE (the body skips
+         * its loop on a non-zero status, then `status != NO_SUCH_FILE`
+         * gates the iosb) */
+        if (status == STATUS_NO_SUCH_FILE && !fresh) status = STATUS_NO_MORE_FILES;
+    }
+
+    if (!status && entry->data)
+    {
+        memset( &st, 0, sizeof(st) );  /* the honest zeros — the mount's records carry kind+name only */
+
+        if (restart_scan) entry->data->pos = 0;
+        while (!status && entry->data->pos < entry->data->count)
+        {
+            status = get_dir_data_entry_ex( entry->data, buffer, io, length, info_class, &last_info,
+                                            &st, entry->attributes[entry->data->pos] );
+            if (!status || status == STATUS_BUFFER_OVERFLOW) entry->data->pos++;
+            if (single_entry && last_info) break;
+        }
+        if (!last_info) status = STATUS_NO_MORE_FILES;
+        else if (status == STATUS_MORE_ENTRIES) status = STATUS_SUCCESS;
+    }
+
+    if (status != STATUS_NO_SUCH_FILE) io->Status = status;
+
+    mutex_unlock( &dir_mutex );
+
+    TRACE( "=> %x (%ld)\n", status, io->Information );
+    return status;
+}
+
+#endif /* __wasm__ */
+
+
 /******************************************************************************
  *              NtQueryDirectoryFile   (NTDLL.@)
  */
@@ -2888,6 +3269,7 @@ NTSTATUS WINAPI NtQueryDirectoryFile( HANDLE handle, HANDLE event, PIO_APC_ROUTI
     enum server_fd_type type;
     struct dir_data *data;
     unsigned int status;
+
 
     TRACE("(%p %p %p %p %p %p 0x%08x 0x%08x 0x%08x %s 0x%08x\n",
           handle, event, apc_routine, apc_context, io, buffer,
@@ -2926,7 +3308,24 @@ NTSTATUS WINAPI NtQueryDirectoryFile( HANDLE handle, HANDLE event, PIO_APC_ROUTI
     if (!buffer) return STATUS_ACCESS_VIOLATION;
 
     if ((status = server_get_unix_fd( handle, FILE_LIST_DIRECTORY, &fd, &needs_close, &type, NULL )))
+    {
+#ifdef __wasm__ /* wineweb: server-held dir handles — the P23 dir layer's
+                 * client arm. The VfsDir record (file.c:255's route) has no
+                 * unix fd; its enumeration rides the wire's
+                 * get_directory_entries (op 242 — the serve exists, the
+                 * mount's children through the seam's list, the P23
+                 * ledger). The mask matching and the info-class fill below
+                 * run unchanged: the arm sources get_cached_dir_data's
+                 * dir_data from the wire instead of the fd's readdir. */
+        if (status == STATUS_BAD_DEVICE_TYPE)
+        {
+            return server_query_directory_file( handle, io, buffer, length,
+                                                info_class, single_entry,
+                                                mask, restart_scan );
+        }
+#endif
         return status;
+    }
 
     if (type != FD_TYPE_DIR)
     {
