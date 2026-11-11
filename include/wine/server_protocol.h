@@ -896,10 +896,8 @@ struct directory_entry
     data_size_t type_len;
     /* wineweb: the mount's real byte count (the P30k metadata-fidelity
      * thread — the miniserver's op-242 serve threads the VFS mount's
-     * DirEntry::size through). data_size_t carries it: the mount is a
-     * wasm linear memory, so a size >= 4GiB cannot exist. The honest
-     * absence is the file TIMES — the mount's records carry no source
-     * for them (the ledger's named-absent rows). */
+     * DirEntry::size through; the wasm linear memory bounds it below
+     * 4GiB). The file TIMES have no mount source — the honest zeros. */
     data_size_t size;
 
 
@@ -7217,6 +7215,6 @@ union generic_reply
     struct get_shared_session_block_reply get_shared_session_block_reply;
 };
 
-#define SERVER_PROTOCOL_VERSION 964
+#define SERVER_PROTOCOL_VERSION 965
 
 #endif /* __WINE_WINE_SERVER_PROTOCOL_H */
