@@ -477,8 +477,40 @@ static LRESULT dispatch_win_proc_params( struct win_proc_params *params, size_t 
 #ifdef __wasm__ /* wineweb: the in-module guest-call primitive (patch 0023) */
     if (thread_info->msg_call_depth > MAX_WINPROC_RECURSION) return 0;
     thread_info->msg_call_depth++;
+#define WINPROC_PROC16 ((void *)1) /* wineweb: class.c's 16-bit placeholder (not shared via a header) */
     if (params->ansi_dst)
-        WARN( "wineweb: ansi WndProc dispatch reached (loud)\n" );
+    {
+        /* The A-dst arms, wine's own dispatch_win_proc_params (user32
+         * winproc.c:698-731) re-implemented: an A caller takes the A proc
+         * verbatim (winproc.c:725-731's final else); a W caller rides
+         * WINPROC_CallProcWtoA — user32-static machinery — except the
+         * conversion-free default (winproc.c:689's switch default —
+         * WM_TIMER/WM_SYSTIMER among them), which passes the args
+         * verbatim too. The conversion-carrying W→A shapes keep the loud
+         * unroutable contract. The proc is either a guest VA (the image
+         * lives at/below the corridor end) or a builtin's wasm function
+         * pointer — those are small table indices in this toolchain (the
+         * W8 run-13 evidence: a builtin proc fed to wineweb_guest_call
+         * lifted garbage). (The P30l wall: the timer proc's same-thread
+         * A-sends — SendDlgItemMessageA's LB_GETCOUNT — died here with a
+         * silent 0 because is_hooked answers TRUE on the queue-shm
+         * absence (hook.c:75; message.c's is_queue_signaled note), so
+         * wine's send fast path (process_message) never ran and every
+         * send reached this arm — which had no A route.) */
+        UINT_PTR proc = (UINT_PTR)params->procA;
+        if (params->ansi || params->msg == WM_TIMER || params->msg == WM_SYSTIMER)
+        {
+            if (proc == (UINT_PTR)WINPROC_PROC16)
+                WARN( "wineweb: 16-bit A proc dispatch reached (loud)\n" );
+            else if (proc >= 0x400000u && proc < 0x20000000u)
+                result = wineweb_guest_call( (unsigned)proc, (unsigned)(UINT_PTR)params->hwnd,
+                                             params->msg, params->wparam, params->lparam );
+            else
+                result = ((WNDPROC)proc)( params->hwnd, params->msg, params->wparam, params->lparam );
+        }
+        else
+            WARN( "wineweb: ansi WndProc dispatch reached (loud)\n" );
+    }
     else
     {
         UINT_PTR proc = (UINT_PTR)params->procW;
