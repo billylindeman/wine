@@ -118,6 +118,12 @@ static void FD31_StripEditControl(HWND hwnd)
  *
  *      Call the appropriate hook
  */
+/* The app's OFN hook is a GUEST PE address in the wineweb runtime — the raw
+ * call through it is a funcref-table call_indirect that traps on guest VAs.
+ * wineweb_routed_hook_call (the wineweb crossing, the winproc pattern) routes
+ * guest addresses through wineweb_guest_call; wine-internal pointers pass
+ * through unchanged. */
+extern UINT_PTR wineweb_routed_hook_call(LPOFNHOOKPROC,HWND,UINT,WPARAM,LPARAM);
 static BOOL FD31_CallWindowProc(const FD31_DATA *lfs, UINT wMsg, WPARAM wParam, LPARAM lParam)
 {
     BOOL ret;
@@ -126,7 +132,7 @@ static BOOL FD31_CallWindowProc(const FD31_DATA *lfs, UINT wMsg, WPARAM wParam, 
     {
         TRACE("Call hookA %p (%p, %04x, %08Ix, %08Ix)\n",
                lfs->ofnA->lpfnHook, lfs->hwnd, wMsg, wParam, lParam);
-        ret = lfs->ofnA->lpfnHook(lfs->hwnd, wMsg, wParam, lParam);
+        ret = wineweb_routed_hook_call(lfs->ofnA->lpfnHook, lfs->hwnd, wMsg, wParam, lParam);
         TRACE("ret hookA %p (%p, %04x, %08Ix, %08Ix)\n",
                lfs->ofnA->lpfnHook, lfs->hwnd, wMsg, wParam, lParam);
         return ret;
@@ -134,7 +140,7 @@ static BOOL FD31_CallWindowProc(const FD31_DATA *lfs, UINT wMsg, WPARAM wParam, 
 
     TRACE("Call hookW %p (%p, %04x, %08Ix, %08Ix)\n",
            lfs->ofnW->lpfnHook, lfs->hwnd, wMsg, wParam, lParam);
-    ret = lfs->ofnW->lpfnHook(lfs->hwnd, wMsg, wParam, lParam);
+    ret = wineweb_routed_hook_call(lfs->ofnW->lpfnHook, lfs->hwnd, wMsg, wParam, lParam);
     TRACE("Ret hookW %p (%p, %04x, %08Ix, %08Ix)\n",
            lfs->ofnW->lpfnHook, lfs->hwnd, wMsg, wParam, lParam);
     return ret;
