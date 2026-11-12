@@ -5060,17 +5060,15 @@ NTSTATUS open_unix_file( HANDLE *handle, const char *unix_name, ACCESS_MASK acce
 
 #ifdef __wasm__ /* P30W-TRACER (temp, stripped with the evidence): where the
                  * resolution's product dies — config_dir's bytes + the unix
-                 * name's first bytes + its length, at the create. */
+                 * name's bytes, at the create. The log rides the module's
+                 * existing wineweb_host.log import (the diag ring). */
     {
         extern const char *config_dir;
-        extern void srvtrace( const char *label, unsigned int v );
-        const char *cfg = config_dir;
-        srvtrace( "P30W cfgp ", (unsigned int)(UINT_PTR)cfg );
-        srvtrace( "P30W cfg0 ", cfg ? *(const unsigned int *)(cfg) : 0xdeadbeef );
-        srvtrace( "P30W cfg1 ", cfg ? *(const unsigned int *)(cfg + 4) : 0xdeadbeef );
-        srvtrace( "P30W unxln ", strlen(unix_name) );
-        srvtrace( "P30W unx0 ", *(const unsigned int *)unix_name );
-        srvtrace( "P30W unx1 ", *(const unsigned int *)(unix_name + 4) );
+        extern void wineweb_host_log( unsigned int level, const char *ptr, unsigned int len );
+        wineweb_host_log( 0, "P30W cfg ", 8 );
+        wineweb_host_log( 0, config_dir ? config_dir : "(null)", config_dir ? strlen(config_dir) : 6 );
+        wineweb_host_log( 0, "P30W unx ", 8 );
+        wineweb_host_log( 0, unix_name, strlen(unix_name) > 48 ? 48 : strlen(unix_name) );
     }
 #endif
 
