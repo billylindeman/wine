@@ -34,11 +34,6 @@
 #include "main.h"
 #include "dialog.h"
 
-#ifdef __i386__ /* wineweb: TEMP P30q diag (removed with the fix) */
-#include <wine/debug.h>
-WINE_DEFAULT_DEBUG_CHANNEL(p30qdiag);
-#endif
-
 #define SPACES_IN_TAB 8
 #define PRINT_LEN_MAX 500
 
@@ -282,14 +277,17 @@ static SAVE_STATUS DoSaveFile(LPCWSTR szFileName, ENCODING enc)
         break;
     }
 
-#ifdef __i386__ /* wineweb: TEMP P30q diag (removed with the fix) - the guest PE compiles i386-windows (pes.rs t.cc), where __i386__ is defined; the wasm builtins compile __wasm__ and never carry these probes */
-    ERR( "P30Q: DOSAVE path %s size %u\n", debugstr_w(szFileName), size );
+#ifdef __i386__ /* wineweb: TEMP P30q diag (removed with the fix) - the guest PE compiles i386-windows (pes.rs t.cc), where __i386__ is defined; the wasm builtins compile __wasm__ and never carry these probes. Cycle 2: the probes write TEB TLS slots (no new imports - the ERR route's __wine_dbg_* imports crossed a p414 registry page the loader refuses). The driver reads TlsSlots[15..13] after the save window (the commdlg check's own TEB walk, boot-driver.mjs). 15 = the step code, 14/13 = the step's operands. */
+    NtCurrentTeb()->TlsSlots[15] = (PVOID)0x51300100; /* DOSAVE entered */
+    NtCurrentTeb()->TlsSlots[14] = (PVOID)size;
 #endif
 
     hFile = CreateFileW(szFileName, GENERIC_WRITE, FILE_SHARE_WRITE,
                        NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-#ifdef __i386__ /* wineweb: TEMP P30q diag (removed with the fix) - the guest PE compiles i386-windows (pes.rs t.cc), where __i386__ is defined; the wasm builtins compile __wasm__ and never carry these probes */
-    ERR( "P30Q: DOSAVE_CREATE handle %p err %ld\n", hFile, GetLastError() );
+#ifdef __i386__ /* wineweb: TEMP P30q diag (removed with the fix) */
+    NtCurrentTeb()->TlsSlots[15] = (PVOID)0x51300200; /* after CreateFileW */
+    NtCurrentTeb()->TlsSlots[14] = hFile;
+    NtCurrentTeb()->TlsSlots[13] = (PVOID)GetLastError();
 #endif
     if(hFile == INVALID_HANDLE_VALUE)
     {
@@ -299,19 +297,25 @@ static SAVE_STATUS DoSaveFile(LPCWSTR szFileName, ENCODING enc)
     }
     if (!WriteFile(hFile, pBytes, size, &dwNumWrite, NULL))
     {
-#ifdef __i386__ /* wineweb: TEMP P30q diag (removed with the fix) - the guest PE compiles i386-windows (pes.rs t.cc), where __i386__ is defined; the wasm builtins compile __wasm__ and never carry these probes */
-        ERR( "P30Q: DOSAVE_WRITE_FAILED err %ld\n", GetLastError() );
+#ifdef __i386__ /* wineweb: TEMP P30q diag (removed with the fix) */
+        NtCurrentTeb()->TlsSlots[15] = (PVOID)0x51300330; /* WriteFile FAILED */
+        NtCurrentTeb()->TlsSlots[14] = (PVOID)GetLastError();
+        NtCurrentTeb()->TlsSlots[13] = (PVOID)dwNumWrite;
 #endif
         ShowLastError();
         CloseHandle(hFile);
         free(pBytes);
         return SAVE_FAILED;
     }
-#ifdef __i386__ /* wineweb: TEMP P30q diag (removed with the fix) - the guest PE compiles i386-windows (pes.rs t.cc), where __i386__ is defined; the wasm builtins compile __wasm__ and never carry these probes */
-    ERR( "P30Q: DOSAVE_WRITE num %u\n", dwNumWrite );
+#ifdef __i386__ /* wineweb: TEMP P30q diag (removed with the fix) */
+    NtCurrentTeb()->TlsSlots[15] = (PVOID)0x51300300; /* WriteFile returned ok */
+    NtCurrentTeb()->TlsSlots[14] = (PVOID)dwNumWrite;
 #endif
     SetEndOfFile(hFile);
     CloseHandle(hFile);
+#ifdef __i386__ /* wineweb: TEMP P30q diag (removed with the fix) */
+    NtCurrentTeb()->TlsSlots[15] = (PVOID)0x51300400; /* after SetEndOfFile + CloseHandle */
+#endif
     free(pBytes);
 
     SendMessageW(Globals.hEdit, EM_SETMODIFY, FALSE, 0);
@@ -692,13 +696,14 @@ BOOL DIALOG_FileSaveAs(VOID)
 retry:
     if (!GetSaveFileNameW(&saveas))
     {
-#ifdef __i386__ /* wineweb: TEMP P30q diag (removed with the fix) - the guest PE compiles i386-windows (pes.rs t.cc), where __i386__ is defined; the wasm builtins compile __wasm__ and never carry these probes */
-        ERR( "P30Q: SAVEAS refused\n" );
+#ifdef __i386__ /* wineweb: TEMP P30q diag (removed with the fix) */
+        NtCurrentTeb()->TlsSlots[15] = (PVOID)0x51300A0A; /* SAVEAS refused */
 #endif
         return FALSE;
     }
-#ifdef __i386__ /* wineweb: TEMP P30q diag (removed with the fix) - the guest PE compiles i386-windows (pes.rs t.cc), where __i386__ is defined; the wasm builtins compile __wasm__ and never carry these probes */
-    ERR( "P30Q: SAVEAS ok path %s enc %d\n", debugstr_w(szPath), Globals.encOfnCombo );
+#ifdef __i386__ /* wineweb: TEMP P30q diag (removed with the fix) */
+    NtCurrentTeb()->TlsSlots[15] = (PVOID)0x51300B0B; /* SAVEAS ok */
+    NtCurrentTeb()->TlsSlots[14] = (PVOID)Globals.encOfnCombo;
 #endif
 
     switch (DoSaveFile(szPath, Globals.encOfnCombo))
