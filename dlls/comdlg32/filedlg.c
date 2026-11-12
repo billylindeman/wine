@@ -3594,6 +3594,11 @@ static int FILEDLG95_LOOKIN_AddItem(HWND hwnd,LPITEMIDLIST pidl, int iInsertId)
 
   TRACE("-- Add %s attr=0x%08lx\n", debugstr_w(sfi.szDisplayName), sfi.dwAttributes);
 
+#ifdef __wasm__ /* wineweb P31 diag: the Look-in combo's items on the live
+                 * run — stripped with the evidence */
+  MESSAGE( "P31_LOOKIN_ADD name %s attr 0x%08lx\n", debugstr_w(sfi.szDisplayName), sfi.dwAttributes );
+#endif
+
   if((sfi.dwAttributes & SFGAO_FILESYSANCESTOR) || (sfi.dwAttributes & SFGAO_FILESYSTEM))
   {
     int iItemID;

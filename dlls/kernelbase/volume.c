@@ -516,6 +516,10 @@ DWORD WINAPI DECLSPEC_HOTPATCH GetLogicalDrives(void)
         NtClose( handle );
     }
 
+#ifdef __wasm__ /* wineweb P31 diag: the drives' bitmask on the live run —
+                 * stripped with the evidence */
+    MESSAGE( "P31_GETLOGICALDRIVES status 0x%08lx mask 0x%08lx\n", status, bitmask );
+#endif
     return bitmask;
 }
 

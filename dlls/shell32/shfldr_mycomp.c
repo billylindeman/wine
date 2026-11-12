@@ -289,10 +289,19 @@ static BOOL CreateMyCompEnumList(IEnumIDListImpl *list, DWORD dwFlags)
         HKEY hkey;
         UINT i;
 
+#ifdef __wasm__ /* wineweb P31 diag: the My-Computer drive walk — stripped
+                 * with the evidence */
+        MESSAGE( "P31_MYCOMP drivemap 0x%08lx\n", dwDrivemap );
+#endif
         while (ret && wszDriveName[0]<='Z')
         {
             if(dwDrivemap & 0x00000001L)
+            {
                 ret = AddToEnumList(list, _ILCreateDrive(wszDriveName));
+#ifdef __wasm__ /* wineweb P31 diag */
+                MESSAGE( "P31_MYCOMP drive %s\n", debugstr_w(wszDriveName) );
+#endif
+            }
             wszDriveName[0]++;
             dwDrivemap = dwDrivemap >> 1;
         }
