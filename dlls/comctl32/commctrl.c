@@ -1958,7 +1958,7 @@ static void MRU_SaveChanged(WINEMRULIST *mp)
  *
  * Frees a most-recently-used items list.
  */
-void WINAPI FreeMRUList(HANDLE hMRUList)
+int WINAPI FreeMRUList(HANDLE hMRUList)
 {
     WINEMRULIST *mp = hMRUList;
     unsigned int i;
@@ -1966,7 +1966,7 @@ void WINAPI FreeMRUList(HANDLE hMRUList)
     TRACE("%p.\n", hMRUList);
 
     if (!hMRUList)
-        return;
+        return 0;
 
     if (mp->wineFlags & WMRUF_CHANGED)
     {
@@ -1981,6 +1981,7 @@ void WINAPI FreeMRUList(HANDLE hMRUList)
     Free(mp->array);
     Free(mp->extview.lpszSubKey);
     Free(mp);
+    return 0;
 }
 
 /**************************************************************************
