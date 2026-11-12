@@ -1633,10 +1633,22 @@ static LRESULT FILEDLG95_InitControls(HWND hwnd)
 
   /* Retrieve and add desktop icon to the toolbar */
   toolbarImageList = (HIMAGELIST)SendMessageW(fodInfos->DlgInfos.hwndTB, TB_GETIMAGELIST, 0, 0L);
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+  ERR( "P30U: FOD_INITCONTROLS desktop-icon begin\n" );
+#endif
   SHGetSpecialFolderLocation(hwnd, CSIDL_DESKTOP, &desktopPidl);
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+  ERR( "P30U: FOD_INITCONTROLS special_folder_location done pidl %p\n", (void *)desktopPidl );
+#endif
   SHGetFileInfoW((const WCHAR *)desktopPidl, 0, &fileinfo, sizeof(fileinfo),
     SHGFI_PIDL | SHGFI_ICON | SHGFI_SMALLICON);
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+  ERR( "P30U: FOD_INITCONTROLS getfileinfo done hicon %p\n", (void *)fileinfo.hIcon );
+#endif
   ImageList_AddIcon(toolbarImageList, fileinfo.hIcon);
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+  ERR( "P30U: FOD_INITCONTROLS addicon done\n" );
+#endif
 
   DestroyIcon(fileinfo.hIcon);
   CoTaskMemFree(desktopPidl);
