@@ -229,6 +229,9 @@ DWORD_PTR WINAPI SHGetFileInfoW(LPCWSTR path,DWORD dwFileAttributes,
         {
             hr = SHBindToParent( pidl, &IID_IShellFolder, (LPVOID*)&psfParent,
                                 (LPCITEMIDLIST*)&pidlLast );
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+            ERR( "P30U: SH_FILEINFO bindtoparent hr 0x%08lx\n", hr );
+#endif
             if (SUCCEEDED(hr))
                 pidlLast = ILClone(pidlLast);
             ILFree(pidl);
@@ -388,8 +391,14 @@ DWORD_PTR WINAPI SHGetFileInfoW(LPCWSTR path,DWORD dwFileAttributes,
     /* get icon index (or load icon)*/
     if (SUCCEEDED(hr) && (flags & (SHGFI_ICON | SHGFI_SYSICONINDEX)))
     {
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+        ERR( "P30U: SH_FILEINFO icon path begin\n" );
+#endif
         IImageList *icon_list;
         SHGetImageList( (flags & SHGFI_SMALLICON) ? SHIL_SMALL : SHIL_LARGE, &IID_IImageList, (void **)&icon_list );
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+        ERR( "P30U: SH_FILEINFO get_image_list done\n" );
+#endif
 
         if (flags & SHGFI_USEFILEATTRIBUTES && !(flags & SHGFI_PIDL))
         {
@@ -425,6 +434,9 @@ DWORD_PTR WINAPI SHGetFileInfoW(LPCWSTR path,DWORD dwFileAttributes,
             {
                 ret = FALSE;
             }
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+            ERR( "P30U: SH_FILEINFO pidl_to_sic done icon %d\n", psfi->iIcon );
+#endif
         }
         if (ret && (flags & SHGFI_SYSICONINDEX))
         {
