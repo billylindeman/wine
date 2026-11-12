@@ -2142,6 +2142,11 @@ COMBOEX_WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	    return COMBOEX_WindowPosChanging (infoPtr, (WINDOWPOS *)lParam);
 
         case WM_SETFOCUS:
+#ifdef __wasm__ /* wineweb: TEMP P30p diag (removed with the fix) */
+            ERR( "P30P: COMBOEX_SETFOCUS self %x edit %x combo %x\n",
+                 (unsigned)(UINT_PTR)hwnd, (unsigned)(UINT_PTR)infoPtr->hwndEdit,
+                 (unsigned)(UINT_PTR)infoPtr->hwndCombo );
+#endif
             if (infoPtr->hwndEdit) SetFocus( infoPtr->hwndEdit );
             else SetFocus( infoPtr->hwndCombo );
             return 0;
