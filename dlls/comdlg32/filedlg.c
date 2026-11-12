@@ -1339,7 +1339,13 @@ INT_PTR CALLBACK FileOpenDlgProc95(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 
          SetPropW(hwnd, L"FileOpenDlgInfos", fodInfos);
 
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+         ERR( "P30U: FOD_INITDIALOG begin\n" );
+#endif
          FILEDLG95_InitControls(hwnd);
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+         ERR( "P30U: FOD_INITDIALOG InitControls done\n" );
+#endif
 
          if (fodInfos->ofnInfos->Flags & OFN_ENABLESIZING)
          {
@@ -1378,9 +1384,14 @@ INT_PTR CALLBACK FileOpenDlgProc95(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 
       	 fodInfos->DlgInfos.hwndCustomDlg =
      	   CreateTemplateDialog((FileOpenDlgInfos *)lParam, hwnd);
-
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+         ERR( "P30U: FOD_INITDIALOG template done custom=%p\n", (void *)fodInfos->DlgInfos.hwndCustomDlg );
+#endif
          FILEDLG95_ResizeControls(hwnd, wParam, lParam);
-      	 FILEDLG95_FillControls(hwnd, wParam, lParam);
+         FILEDLG95_FillControls(hwnd, wParam, lParam);
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+         ERR( "P30U: FOD_INITDIALOG FillControls done\n" );
+#endif
 
          if( fodInfos->DlgInfos.hwndCustomDlg)
              ShowWindow( fodInfos->DlgInfos.hwndCustomDlg, SW_SHOW);
@@ -1530,6 +1541,10 @@ static LRESULT FILEDLG95_InitControls(HWND hwnd)
   BOOL win98plus   = FALSE;
   BOOL handledPath = FALSE;
   OSVERSIONINFOW osVi;
+
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+  ERR( "P30U: FOD_INITCONTROLS begin\n" );
+#endif
 
   static const TBBUTTON tbb[] =
   {
@@ -1846,6 +1861,9 @@ static LRESULT FILEDLG95_InitControls(HWND hwnd)
       /* 6. Win98+ and 2000+: Use personal files dir, others use current dir */
       if (!handledPath && (win2000plus || win98plus)) {
           fodInfos->initdir = malloc(MAX_PATH * sizeof(WCHAR));
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+          ERR( "P30U: FOD_INITDIR walk begin\n" );
+#endif
 
           if (SHGetFolderPathW(hwnd, CSIDL_PERSONAL, 0, 0, fodInfos->initdir) == S_OK)
           {
@@ -1869,7 +1887,13 @@ static LRESULT FILEDLG95_InitControls(HWND hwnd)
           TRACE("No initial dir specified, using current dir of %s\n", debugstr_w(fodInfos->initdir));
       }
   }
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+  ERR( "P30U: FOD_INITCONTROLS pre-setfocus\n" );
+#endif
   SetFocus( fodInfos->DlgInfos.hwndFileName );
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+  ERR( "P30U: FOD_INITCONTROLS setfocus done\n" );
+#endif
   TRACE("After manipulation, file = %s, dir = %s\n", debugstr_w(fodInfos->filename), debugstr_w(fodInfos->initdir));
 
   /* Must the open as read only check box be checked ?*/
