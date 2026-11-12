@@ -3006,6 +3006,10 @@ HRESULT WINAPI SHGetFolderPathAndSubDirW(
     else
         lstrcpyW(szBuildPath, szTemp);
 
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+    ERR( "P30U: SH_GFP folder %d hr 0x%08lx temp %s\n", nFolder, hr, debugstr_w(szTemp) );
+#endif
+
     if (FAILED(hr)) goto end;
 
     if(pszSubPath) {
@@ -3027,11 +3031,18 @@ HRESULT WINAPI SHGetFolderPathAndSubDirW(
 
     if (PathFileExistsW(szBuildPath)) goto end;
 
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+    ERR( "P30U: SH_GFP verify path %s missing (create flag %d)\n", debugstr_w(szBuildPath), !!(nFolder & CSIDL_FLAG_CREATE) );
+#endif
+
     /* not existing but we are not allowed to create it.  The return value
      * is verified against shell32 version 6.0.
      */
     if (!(nFolder & CSIDL_FLAG_CREATE))
     {
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+        ERR( "P30U: SH_GFP refuse path_not_found\n" );
+#endif
         hr = HRESULT_FROM_WIN32(ERROR_PATH_NOT_FOUND);
         goto end;
     }

@@ -921,8 +921,14 @@ HRESULT WINAPI ISF_Desktop_Constructor (
     {
         IDesktopFolderImpl *sf;
 
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+        { BOOL _g = SHGetSpecialFolderPathW( 0, szMyPath, CSIDL_DESKTOPDIRECTORY, FALSE );
+          ERR( "P30U: SH_DESKTOP_CTOR special_folder ret %d path %s\n", _g, _g ? debugstr_w(szMyPath) : L"(none)" );
+          if (!_g) return E_UNEXPECTED; }
+#else
         if (!SHGetSpecialFolderPathW( 0, szMyPath, CSIDL_DESKTOPDIRECTORY, FALSE ))
             return E_UNEXPECTED;
+#endif
 
         sf = LocalAlloc( LMEM_ZEROINIT, sizeof (IDesktopFolderImpl) );
         if (!sf)

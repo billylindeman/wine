@@ -346,6 +346,10 @@ HRESULT WINAPI SHGetDesktopFolder(IShellFolder **psf)
 	*psf = NULL;
 	hres = ISF_Desktop_Constructor(NULL, &IID_IShellFolder, (LPVOID*)psf);
 
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+	ERR( "P30U: SH_GETDESKTOP ctor ret 0x%08lx psf %p\n", hres, psf ? (void *)*psf : NULL );
+#endif
+
 	TRACE("-- %p->(%p) 0x%08lx\n", psf, *psf, hres);
 	return hres;
 }
