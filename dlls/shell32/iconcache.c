@@ -453,9 +453,15 @@ static BOOL WINAPI SIC_Initialize( INIT_ONCE *once, void *param, void **context 
 
     TRACE("large %ldx%ld small %ldx%ld\n", sizes[SHIL_LARGE].cx, sizes[SHIL_LARGE].cy, sizes[SHIL_SMALL].cx, sizes[SHIL_SMALL].cy);
 
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+    ERR( "P30U: SH_SIC_INIT begin\n" );
+#endif
     sic_hdpa = DPA_Create(16);
     if (!sic_hdpa)
         return(FALSE);
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+    ERR( "P30U: SH_SIC_INIT dpa done\n" );
+#endif
 
     for (i = 0; i < ARRAY_SIZE(shell_imagelists); i++)
     {
@@ -468,16 +474,19 @@ static BOOL WINAPI SIC_Initialize( INIT_ONCE *once, void *param, void **context 
         {
             failed = TRUE;
         }
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+    ERR( "P30U: SH_SIC_INIT imagelist %u done hicon %p failed %d\n", i, (void *)hicons[i], failed );
+#endif
     }
 
-    if (failed)
-    {
-        FIXME("Failed to load IDI_SHELL_FILE icon!\n");
-        return FALSE;
-    }
-
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+    ERR( "P30U: SH_SIC_INIT append begin\n" );
+#endif
     SIC_IconAppend(swShell32Name, IDI_SHELL_FILE - 1, hicons, 0);
     SIC_IconAppend(swShell32Name, -IDI_SHELL_FILE, hicons, 0);
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+    ERR( "P30U: SH_SIC_INIT done\n" );
+#endif
 
     TRACE("small list=%p, large list=%p\n", shell_imagelists[SHIL_SMALL], shell_imagelists[SHIL_LARGE]);
 
