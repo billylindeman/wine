@@ -34,6 +34,11 @@
 #include "main.h"
 #include "dialog.h"
 
+#ifdef __i386__ /* wineweb: TEMP P30q diag (removed with the fix) */
+#include <wine/debug.h>
+WINE_DEFAULT_DEBUG_CHANNEL(p30qdiag);
+#endif
+
 #define SPACES_IN_TAB 8
 #define PRINT_LEN_MAX 500
 
