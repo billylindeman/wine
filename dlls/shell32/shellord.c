@@ -78,7 +78,14 @@ typedef struct tagCREATEMRULIST
 #define MRUF_DELAYED_SAVE 2 /* only save list order to reg. is FreeMRUList */
 
 extern HANDLE WINAPI CreateMRUListA(LPCREATEMRULISTA lpcml);
-extern DWORD  WINAPI FreeMRUList(HANDLE hMRUList);
+/* wine's own comctl32 body is void (dlls/comctl32/commctrl.c:1961); the
+ * DWORD here was a stale extern whose return no call site reads
+ * (shellord.c's FreeMRUList use discards it). The wasm wiring binds
+ * cross-module imports by exact type, so the stale DWORD refused the
+ * instantiation-order serve (the P30u tracer's DPA_Create-class stall:
+ * the whole comctl32 family fell to the named-stub class on ONE skewed
+ * decl). Aligned to the body — the type-skew disposition retires. */
+extern void   WINAPI FreeMRUList(HANDLE hMRUList);
 extern INT    WINAPI AddMRUData(HANDLE hList, LPCVOID lpData, DWORD cbData);
 extern INT    WINAPI FindMRUData(HANDLE hList, LPCVOID lpData, DWORD cbData, LPINT lpRegNum);
 extern INT    WINAPI EnumMRUListA(HANDLE hList, INT nItemPos, LPVOID lpBuffer, DWORD nBufferSize);
