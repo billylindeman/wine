@@ -475,6 +475,10 @@ static LRESULT dispatch_win_proc_params( struct win_proc_params *params, size_t 
     NTSTATUS status;
 
 #ifdef __wasm__ /* wineweb: the in-module guest-call primitive (patch 0023) */
+    if (params->msg == WM_GETDLGCODE) /* wineweb: TEMP P30p diag (removed with the fix) */
+        ERR( "P30P: DISPATCH dlgcode ansi %d ansi_dst %d procW %p procA %p\n",
+             params->ansi, params->ansi_dst, (void *)(UINT_PTR)params->procW,
+             (void *)(UINT_PTR)params->procA );
     if (thread_info->msg_call_depth > MAX_WINPROC_RECURSION) return 0;
     thread_info->msg_call_depth++;
 #define WINPROC_PROC16 ((void *)1) /* wineweb: class.c's 16-bit placeholder (not shared via a header) */
@@ -2413,8 +2417,22 @@ static LRESULT call_window_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
     if (msg & 0x80000000)
         return handle_internal_message( hwnd, msg, wparam, lparam );
 
-    if (!is_current_thread_window( hwnd )) return 0;
-    if (!thread_info->client_info) return 0;
+    if (!is_current_thread_window( hwnd ))
+    {
+#ifdef __wasm__ /* wineweb: TEMP P30p diag (removed with the fix) */
+        if (msg == WM_GETDLGCODE)
+            ERR( "P30P: CWP early-return not-current-thread hwnd %x\n", (unsigned)(UINT_PTR)hwnd );
+#endif
+        return 0;
+    }
+    if (!thread_info->client_info)
+    {
+#ifdef __wasm__ /* wineweb: TEMP P30p diag (removed with the fix) */
+        if (msg == WM_GETDLGCODE)
+            ERR( "P30P: CWP early-return no-client-info hwnd %x\n", (unsigned)(UINT_PTR)hwnd );
+#endif
+        return 0;
+    }
 
     prev_source = thread_info->client_info->msg_source;
     thread_info->client_info->msg_source = msg_source_unavailable;

@@ -1276,6 +1276,10 @@ BOOL WINAPI IsDialogMessageW( HWND hwndDlg, LPMSG msg )
          * It does NOT get sent in the test program I have
          */
         dlgCode = SendMessageW( msg->hwnd, WM_GETDLGCODE, msg->wParam, (LPARAM)msg );
+#ifdef __wasm__ /* wineweb: TEMP P30p diag (the tranche pattern — removed with the fix) */
+        ERR( "P30P: WMCHAR hwnd %x wp %x dlgCode %x\n",
+             (unsigned)(UINT_PTR)msg->hwnd, (unsigned)msg->wParam, (unsigned)dlgCode );
+#endif
         if (dlgCode & (DLGC_WANTCHARS|DLGC_WANTMESSAGE)) break;
         if (msg->wParam == '\t' && (dlgCode & DLGC_WANTTAB)) break;
         /* drop through */
