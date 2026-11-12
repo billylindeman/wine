@@ -1983,6 +1983,12 @@ COMBOEX_WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     COMBOEX_INFO *infoPtr = COMBOEX_GetInfoPtr (hwnd);
 
+#ifdef __wasm__ /* wineweb: TEMP P30p diag (removed with the fix) */
+    if (uMsg == WM_SETFOCUS || uMsg == WM_CHAR || uMsg == WM_GETDLGCODE)
+        ERR( "P30P: COMBOEX_WNDPROC self %x msg %x\n",
+             (unsigned)(UINT_PTR)hwnd, uMsg );
+#endif
+
     TRACE("hwnd %p, msg %x, wparam %Ix, lParam %Ix\n", hwnd, uMsg, wParam, lParam);
 
     if (!infoPtr) {
@@ -2170,6 +2176,9 @@ void COMBOEX_Register (void)
     ZeroMemory (&wndClass, sizeof(WNDCLASSW));
     wndClass.style         = CS_GLOBALCLASS;
     wndClass.lpfnWndProc   = COMBOEX_WindowProc;
+#ifdef __wasm__ /* wineweb: TEMP P30p diag (removed with the fix) */
+    ERR( "P30P: COMBOEX_REGISTER proc %x\n", (unsigned)(UINT_PTR)wndClass.lpfnWndProc );
+#endif
     wndClass.cbClsExtra    = 0;
     wndClass.cbWndExtra    = sizeof(COMBOEX_INFO *);
     wndClass.hCursor       = LoadCursorW (0, (LPWSTR)IDC_ARROW);
