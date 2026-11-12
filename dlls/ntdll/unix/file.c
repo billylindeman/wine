@@ -5058,6 +5058,22 @@ NTSTATUS open_unix_file( HANDLE *handle, const char *unix_name, ACCESS_MASK acce
     unsigned int status;
     data_size_t len;
 
+#ifdef __wasm__ /* P30W-TRACER (temp, stripped with the evidence): where the
+                 * resolution's product dies — config_dir's bytes + the unix
+                 * name's first bytes + its length, at the create. */
+    {
+        extern const char *config_dir;
+        extern void srvtrace( const char *label, unsigned int v );
+        const char *cfg = config_dir;
+        srvtrace( "P30W cfgp ", (unsigned int)(UINT_PTR)cfg );
+        srvtrace( "P30W cfg0 ", cfg ? *(const unsigned int *)(cfg) : 0xdeadbeef );
+        srvtrace( "P30W cfg1 ", cfg ? *(const unsigned int *)(cfg + 4) : 0xdeadbeef );
+        srvtrace( "P30W unxln ", strlen(unix_name) );
+        srvtrace( "P30W unx0 ", *(const unsigned int *)unix_name );
+        srvtrace( "P30W unx1 ", *(const unsigned int *)(unix_name + 4) );
+    }
+#endif
+
     if ((status = wine_server_alloc_object_attributes( attr, &objattr, &len ))) return status;
 
     SERVER_START_REQ( create_file )
