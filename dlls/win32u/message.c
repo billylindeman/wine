@@ -487,6 +487,10 @@ static LRESULT dispatch_win_proc_params( struct win_proc_params *params, size_t 
         ERR( "P30P: DISPATCH dlgcode hwnd %x ansi %d ansi_dst %d procW %p procA %p\n",
              (unsigned)(UINT_PTR)params->hwnd, params->ansi, params->ansi_dst,
              (void *)(UINT_PTR)params->procW, (void *)(UINT_PTR)params->procA );
+    if (params->msg == WM_SETFOCUS) /* wineweb: TEMP P30p diag (removed with the fix) */
+        ERR( "P30P: DISPATCH setfocus hwnd %x procW %p procA %p\n",
+             (unsigned)(UINT_PTR)params->hwnd,
+             (void *)(UINT_PTR)params->procW, (void *)(UINT_PTR)params->procA );
     if (thread_info->msg_call_depth > MAX_WINPROC_RECURSION) return 0;
     thread_info->msg_call_depth++;
 #define WINPROC_PROC16 ((void *)1) /* wineweb: class.c's 16-bit placeholder (not shared via a header) */

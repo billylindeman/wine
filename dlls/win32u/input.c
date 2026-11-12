@@ -2109,6 +2109,10 @@ static HWND set_focus_window( HWND hwnd )
 
         NtUserNotifyWinEvent( EVENT_OBJECT_FOCUS, hwnd, OBJID_CLIENT, 0 );
 
+#ifdef __wasm__ /* wineweb: TEMP P30p diag (removed with the fix) */
+        ERR( "P30P: SETFOCUS_SEND hwnd %x is_window %d\n",
+             (unsigned)(UINT_PTR)hwnd, is_window( hwnd ) );
+#endif
         send_message( hwnd, WM_SETFOCUS, (WPARAM)previous, 0 );
     }
     return previous;
