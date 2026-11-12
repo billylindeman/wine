@@ -2036,10 +2036,17 @@ static LRESULT FILEDLG95_OnWMCommand(HWND hwnd, WPARAM wParam)
   WORD wNotifyCode = HIWORD(wParam); /* notification code */
   WORD id = LOWORD(wParam);         /* item, control, or accelerator identifier */
 
+#ifdef __wasm__ /* wineweb: TEMP P30q diag (removed with the fix) */
+  ERR( "P30Q: FOD_WMCOMMAND hwnd %p id %x notify %x\n", hwnd, id, wNotifyCode );
+#endif
+
   switch (id)
   {
     /* OK button */
   case IDOK:
+#ifdef __wasm__ /* wineweb: TEMP P30q diag (removed with the fix) */
+    ERR( "P30Q: FOD_IDOK hwnd %p\n", hwnd );
+#endif
     FILEDLG95_OnOpen(hwnd);
     break;
     /* Cancel button */
@@ -2611,6 +2618,9 @@ BOOL FILEDLG95_OnOpen(HWND hwnd)
   LPSHELLFOLDER lpsf = NULL;
   int nOpenAction;
 
+#ifdef __wasm__ /* wineweb: TEMP P30q diag (removed with the fix) */
+  ERR( "P30Q: FOD_ONOPEN hwnd %p\n", hwnd );
+#endif
   TRACE("hwnd=%p\n", hwnd);
 
   /* try to browse the selected item */
@@ -2665,6 +2675,9 @@ BOOL FILEDLG95_OnOpen(HWND hwnd)
                                              fodInfos->ofnInfos->Flags,
                                              fodInfos->DlgInfos.dwDlgProp & FODPROP_SAVEDLG,
                                              nOpenAction);
+#ifdef __wasm__ /* wineweb: TEMP P30q diag (removed with the fix) */
+  ERR( "P30Q: FOD_VALIDATE path %s action %d\n", debugstr_w(lpstrPathAndFile), nOpenAction );
+#endif
   if(!nOpenAction)
       goto ret;
 

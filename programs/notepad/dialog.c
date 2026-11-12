@@ -654,6 +654,9 @@ VOID DIALOG_FileOpen(VOID)
 /* Return FALSE to cancel close */
 BOOL DIALOG_FileSave(VOID)
 {
+#ifdef __i386__ /* wineweb: TEMP P30q diag (removed with the fix) */
+    ERR( "P30Q: FILESAVE route szFileName %s encFile %d\n", debugstr_w(Globals.szFileName), Globals.encFile );
+#endif
     if (Globals.szFileName[0] == '\0')
         return DIALOG_FileSaveAs();
     else
