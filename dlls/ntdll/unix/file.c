@@ -5076,6 +5076,12 @@ NTSTATUS open_unix_file( HANDLE *handle, const char *unix_name, ACCESS_MASK acce
         }
         wineweb_host_log( 0, "P30W cfg ", 8 );
         wineweb_host_log( 0, config_dir ? config_dir : "(null)", config_dir ? strlen(config_dir) : 6 );
+        {
+            /* the neighborhood: what buffer overlaps the static */
+            const unsigned char *p = (const unsigned char *)config_dir;
+            wineweb_host_log( 0, "P30W near ", 10 );
+            wineweb_host_log( 0, (const char *)(p - 16), 48 );
+        }
         wineweb_host_log( 0, "P30W unx ", 8 );
         wineweb_host_log( 0, unix_name, strlen(unix_name) > 48 ? 48 : strlen(unix_name) );
     }
