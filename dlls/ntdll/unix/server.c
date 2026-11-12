@@ -296,6 +296,28 @@ unsigned int server_call_unlocked( void *req_ptr )
                  * answers in-module (patch 0023; the P3.8 notepad capstone,
                  * docs/spikes/p3-notepad-demo.md T2). */
     (void)data;
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+    if (req->u.req.request_header.req == 44) /* create_file: the resolved name decides the server's Vfs-vs-Memory route */
+    {
+        char nmsg[300];
+        unsigned pos = 0;
+        static const char tag[] = "srvcall cname ";
+        for (unsigned t = 0; t < sizeof(tag) - 1; t++) nmsg[pos++] = tag[t];
+        for (unsigned i = 0; i < req->data_count && i < 4 && pos < sizeof(nmsg) - 2; i++)
+        {
+            if (!req->data[i].size) continue;
+            const unsigned char *p = (const unsigned char *)(UINT_PTR)req->data[i].ptr;
+            for (unsigned j = 0; j + 1 < req->data[i].size && pos < sizeof(nmsg) - 2; j += 2)
+            {
+                unsigned w = p[j] | (p[j + 1] << 8);
+                nmsg[pos++] = (w >= 0x20 && w < 0x7f) ? (char)w : (w ? '.' : '|');
+            }
+            nmsg[pos++] = '|';
+        }
+        nmsg[pos++] = '\n';
+        wineweb_host_log( 0, nmsg, pos );
+    }
+#endif
     return wineweb_server_call( req_ptr );
 #endif
     if ((ret = send_request( data->request_fd, req ))) return ret;
