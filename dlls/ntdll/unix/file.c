@@ -5066,6 +5066,14 @@ NTSTATUS open_unix_file( HANDLE *handle, const char *unix_name, ACCESS_MASK acce
         extern const char *config_dir;
         __attribute__((import_module("wineweb_host"), import_name("log")))
         extern void wineweb_host_log( unsigned int level, const char *ptr, unsigned int len );
+        {
+            char hdr[24];
+            static const char hex[] = "0123456789abcdef";
+            unsigned int p = (unsigned int)(UINT_PTR)config_dir, i;
+            memcpy( hdr, "P30W cfgp ", 10 );
+            for (i = 0; i < 8; i++) hdr[10 + i] = hex[(p >> (28 - 4 * i)) & 0xf];
+            wineweb_host_log( 0, hdr, 18 );
+        }
         wineweb_host_log( 0, "P30W cfg ", 8 );
         wineweb_host_log( 0, config_dir ? config_dir : "(null)", config_dir ? strlen(config_dir) : 6 );
         wineweb_host_log( 0, "P30W unx ", 8 );
