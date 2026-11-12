@@ -2615,11 +2615,19 @@ BOOL FILEDLG95_OnOpen(HWND hwnd)
 
   /* try to browse the selected item */
   if(BrowseSelectedFolder(hwnd))
+  {
+#ifdef __wasm__ /* wineweb: TEMP P30q diag (removed with the fix) */
+    ERR( "P30Q: FOD_ONOPEN browsed_selected\n" );
+#endif
       return FALSE;
+  }
 
   /* get the files from the edit control */
   nFileCount = FILEDLG95_FILENAME_GetFileNames(hwnd, &lpstrFileList, &sizeUsed);
 
+#ifdef __wasm__ /* wineweb: TEMP P30q diag (removed with the fix) */
+  ERR( "P30Q: FOD_ONOPEN count %u\n", nFileCount );
+#endif
   if(nFileCount == 0)
       return FALSE;
 
@@ -3897,6 +3905,9 @@ static int FILEDLG95_FILENAME_GetFileNames (HWND hwnd, LPWSTR * lpstrFileList, U
 
 	/* get the filenames from the filename control */
 	nStrLen = GetWindowTextLengthW( fodInfos->DlgInfos.hwndFileName );
+#ifdef __wasm__ /* wineweb: TEMP P30q diag (removed with the fix) */
+	ERR( "P30Q: FOD_GETNAMES ctrl %p len %u\n", fodInfos->DlgInfos.hwndFileName, nStrLen );
+#endif
 	lpstrEdit = malloc( (nStrLen+1)*sizeof(WCHAR) );
 	GetWindowTextW( fodInfos->DlgInfos.hwndFileName, lpstrEdit, nStrLen+1);
 
