@@ -696,6 +696,10 @@ BOOL DIALOG_FileSaveAs(VOID)
     Globals.encOfnCombo = Globals.encFile;
     Globals.bOfnIsOpenDialog = FALSE;
 
+#ifdef __i386__ /* wineweb: TEMP P30q diag (removed with the fix) */
+    NtCurrentTeb()->TlsSlots[15] = (PVOID)0x51300C0C; /* SAVEAS entered */
+#endif
+
 retry:
     if (!GetSaveFileNameW(&saveas))
     {
