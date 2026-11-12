@@ -972,6 +972,11 @@ static LRESULT COMBOEX_Create (HWND hwnd, CREATESTRUCTA const *cs)
     infoPtr->NtfUnicode = (i == NFR_UNICODE);
 
     SetWindowLongPtrW (hwnd, 0, (DWORD_PTR)infoPtr);
+#ifdef __wasm__ /* wineweb: TEMP P30p diag (removed with the fix) */
+    ERR( "P30P: COMBOEX_CREATE self %x stored %p readback %p\n",
+         (unsigned)(UINT_PTR)hwnd, (void *)(UINT_PTR)infoPtr,
+         (void *)(UINT_PTR)GetWindowLongPtrW( hwnd, 0 ) );
+#endif
 
     if (TRACE_ON(comboex)) {
 	RECT client, rect;
@@ -1984,9 +1989,9 @@ COMBOEX_WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     COMBOEX_INFO *infoPtr = COMBOEX_GetInfoPtr (hwnd);
 
 #ifdef __wasm__ /* wineweb: TEMP P30p diag (removed with the fix) */
-    if (uMsg == WM_SETFOCUS || uMsg == WM_CHAR || uMsg == WM_GETDLGCODE)
-        ERR( "P30P: COMBOEX_WNDPROC self %x msg %x\n",
-             (unsigned)(UINT_PTR)hwnd, uMsg );
+    if (uMsg == WM_SETFOCUS || uMsg == WM_CHAR || uMsg == WM_GETDLGCODE || uMsg == WM_CREATE || uMsg == WM_NCCREATE)
+        ERR( "P30P: COMBOEX_WNDPROC self %x msg %x infoPtr %p\n",
+             (unsigned)(UINT_PTR)hwnd, uMsg, (void *)(UINT_PTR)infoPtr );
 #endif
 
     TRACE("hwnd %p, msg %x, wparam %Ix, lParam %Ix\n", hwnd, uMsg, wParam, lParam);
