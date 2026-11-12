@@ -225,6 +225,9 @@ static HRESULT WINAPI ISF_MyComputer_fnParseDisplayName (IShellFolder2 *iface,
     {
         hr = SHELL32_ParseNextElement (iface, hwndOwner, pbc, &pidlTemp,
                               (LPOLESTR) szNext, pchEaten, pdwAttributes);
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+        ERR( "P30U: SH_MYCOMP_NEXT next %s ret 0x%08lx\n", debugstr_w(szNext), hr );
+#endif
     }
     else if (pidlTemp)
     {

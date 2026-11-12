@@ -2040,6 +2040,9 @@ static LRESULT FILEDLG95_OnWMCommand(HWND hwnd, WPARAM wParam)
   {
     /* OK button */
   case IDOK:
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+    ERR( "P30U: FOD_WMCOMMAND IDOK hwnd=%p notify=%04x\n", hwnd, wNotifyCode );
+#endif
     FILEDLG95_OnOpen(hwnd);
     break;
     /* Cancel button */
@@ -2465,6 +2468,9 @@ void FILEDLG95_OnOpenMessage(HWND hwnd, int idCaption, int idText)
 {
   WCHAR strMsgTitle[MAX_PATH];
   WCHAR strMsgText [MAX_PATH];
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+  ERR( "P30U: FOD_MESSAGE cap %d text %d\n", idCaption, idText );
+#endif
   if (idCaption)
     LoadStringW(COMDLG32_hInstance, idCaption, strMsgTitle, ARRAY_SIZE(strMsgTitle));
   else
@@ -2483,11 +2489,24 @@ int FILEDLG95_ValidatePathAction(LPWSTR lpstrPathAndFile, IShellFolder **ppsf,
     /* check for invalid chars */
     if((wcspbrk(lpstrPathAndFile+3, L"/:<>|") != NULL) && !(flags & OFN_NOVALIDATE))
     {
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+        ERR( "P30U: FOD_VALIDATE invalid_chars %s\n", debugstr_w(lpstrPathAndFile) );
+#endif
         FILEDLG95_OnOpenMessage(hwnd, IDS_INVALID_FILENAME_TITLE, IDS_INVALID_FILENAME);
         return FALSE;
     }
 
-    if (FAILED (SHGetDesktopFolder(ppsf))) return FALSE;
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+    ERR( "P30U: FOD_VALIDATE enter path %s flags 0x%08lx save %d def %d\n",
+         debugstr_w(lpstrPathAndFile), flags, isSaveDlg, defAction );
+#endif
+    if (FAILED (SHGetDesktopFolder(ppsf)))
+    {
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+        ERR( "P30U: FOD_VALIDATE desktop_folder_failed\n" );
+#endif
+        return FALSE;
+    }
 
     lpszTemp1 = lpszTemp = lpstrPathAndFile;
     while (lpszTemp1)
@@ -2537,11 +2556,17 @@ int FILEDLG95_ValidatePathAction(LPWSTR lpstrPathAndFile, IShellFolder **ppsf,
         {
             /* the path component is valid, we have a pidl of the next path component */
             TRACE("parse OK attr=0x%08lx pidl=%p\n", dwAttributes, pidl);
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+            ERR( "P30U: FOD_PARSE ok comp %s attr 0x%08lx\n", debugstr_w(lpwstrTemp), dwAttributes );
+#endif
             if(dwAttributes & SFGAO_FOLDER)
             {
                 if(FAILED(IShellFolder_BindToObject(*ppsf, pidl, 0, &IID_IShellFolder, (LPVOID*)&lpsfChild)))
                 {
                     ERR("bind to failed\n"); /* should not fail */
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+                    ERR( "P30U: FOD_VALIDATE bind_failed comp %s\n", debugstr_w(lpwstrTemp) );
+#endif
                     break;
                 }
                 IShellFolder_Release(*ppsf);
@@ -2552,6 +2577,9 @@ int FILEDLG95_ValidatePathAction(LPWSTR lpstrPathAndFile, IShellFolder **ppsf,
             {
                 TRACE("value\n");
 
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+                ERR( "P30U: FOD_PARSE value comp %s\n", debugstr_w(lpwstrTemp) );
+#endif
                 /* end dialog, return value */
                 nOpenAction = ONOPEN_OPEN;
                 break;
@@ -2561,6 +2589,10 @@ int FILEDLG95_ValidatePathAction(LPWSTR lpstrPathAndFile, IShellFolder **ppsf,
         }
         else if (!(flags & OFN_NOVALIDATE))
         {
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+            ERR( "P30U: FOD_PARSE fail comp %s rem %s tail0 %d\n",
+                 debugstr_w(lpwstrTemp), debugstr_w(lpszTemp), *lpszTemp == 0 );
+#endif
             if(*lpszTemp ||	/* points to trailing null for last path element */
                (lpwstrTemp[lstrlenW(lpwstrTemp)-1] == '\\')) /* or if last element ends in '\' */
             {
@@ -2613,15 +2645,32 @@ BOOL FILEDLG95_OnOpen(HWND hwnd)
 
   TRACE("hwnd=%p\n", hwnd);
 
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+  ERR( "P30U: FOD_ONOPEN enter hwnd=%p fod=%p\n", hwnd, (void *)fodInfos );
+#endif
+
   /* try to browse the selected item */
   if(BrowseSelectedFolder(hwnd))
+  {
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+    ERR( "P30U: FOD_BAIL browsed_selected\n" );
+#endif
       return FALSE;
+  }
 
   /* get the files from the edit control */
   nFileCount = FILEDLG95_FILENAME_GetFileNames(hwnd, &lpstrFileList, &sizeUsed);
 
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+  ERR( "P30U: FOD_COUNT %u\n", nFileCount );
+#endif
   if(nFileCount == 0)
+  {
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+    ERR( "P30U: FOD_BAIL count_zero\n" );
+#endif
       return FALSE;
+  }
 
   if(nFileCount > 1)
   {
@@ -2666,7 +2715,15 @@ BOOL FILEDLG95_OnOpen(HWND hwnd)
                                              fodInfos->DlgInfos.dwDlgProp & FODPROP_SAVEDLG,
                                              nOpenAction);
   if(!nOpenAction)
+  {
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+    ERR( "P30U: FOD_BAIL validate_zero\n" );
+#endif
       goto ret;
+  }
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+  ERR( "P30U: FOD_ACTION %d\n", nOpenAction );
+#endif
 
 /*
   Step 3: here we have a cleaned up and validated path
@@ -2954,6 +3011,9 @@ BOOL FILEDLG95_OnOpen(HWND hwnd)
           FILEDLG95_MRU_save_filename(lpstrPathAndFile);
 
           TRACE("close\n");
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+          ERR( "P30U: FOD_CLOSE path %s\n", debugstr_w(lpstrPathAndFile) );
+#endif
 	  FILEDLG95_Clean(hwnd);
           ret = EndDialog(hwnd, TRUE);
 	}
@@ -2976,6 +3036,9 @@ BOOL FILEDLG95_OnOpen(HWND hwnd)
   }
 
 ret:
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+  ERR( "P30U: FOD_ONOPEN exit ret=%d\n", ret );
+#endif
   if(lpsf) IShellFolder_Release(lpsf);
   return ret;
 }
@@ -3897,8 +3960,15 @@ static int FILEDLG95_FILENAME_GetFileNames (HWND hwnd, LPWSTR * lpstrFileList, U
 
 	/* get the filenames from the filename control */
 	nStrLen = GetWindowTextLengthW( fodInfos->DlgInfos.hwndFileName );
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+	ERR( "P30U: FOD_GETNAMES ctrl %p len %u\n", fodInfos->DlgInfos.hwndFileName, nStrLen );
+#endif
 	lpstrEdit = malloc( (nStrLen+1)*sizeof(WCHAR) );
 	GetWindowTextW( fodInfos->DlgInfos.hwndFileName, lpstrEdit, nStrLen+1);
+
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+	ERR( "P30U: FOD_GETNAMES text %s\n", debugstr_w(lpstrEdit) );
+#endif
 
 	TRACE("nStrLen=%u str=%s\n", nStrLen, debugstr_w(lpstrEdit));
 
@@ -4109,6 +4179,9 @@ static BOOL BrowseSelectedFolder(HWND hwnd)
 
   TRACE("\n");
 
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+  ERR( "P30U: FOD_BROWSESEL nsel %u\n", GetNumSelected(fodInfos->Shell.FOIDataObject) );
+#endif
   if (GetNumSelected(fodInfos->Shell.FOIDataObject) == 1)
   {
       LPITEMIDLIST pidlSelection;

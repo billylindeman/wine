@@ -150,10 +150,16 @@ HRESULT SHELL32_ParseNextElement (IShellFolder2 * psf, HWND hwndOwner, LPBC pbc,
     /* get the shellfolder for the child pidl and let it analyse further */
     hr = IShellFolder2_BindToObject (psf, *pidlInOut, pbc, &IID_IShellFolder, (LPVOID *) & psfChild);
 
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+    ERR( "P30U: SH_NEXT bind ret 0x%08lx next %s\n", hr, debugstr_w(szNext) );
+#endif
     if (SUCCEEDED(hr)) {
 	hr = IShellFolder_ParseDisplayName (psfChild, hwndOwner, pbc, szNext, pEaten, &pidlOut, pdwAttributes);
 	IShellFolder_Release (psfChild);
 
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+	ERR( "P30U: SH_NEXT parse ret 0x%08lx next %s\n", hr, debugstr_w(szNext) );
+#endif
 	if (SUCCEEDED(hr)) {
 	    pidlTemp = ILCombine (*pidlInOut, pidlOut);
 

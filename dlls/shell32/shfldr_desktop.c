@@ -260,6 +260,9 @@ static HRESULT WINAPI ISF_Desktop_fnParseDisplayName (IShellFolder2 * iface,
         {
             hr = SHELL32_ParseNextElement(iface, hwndOwner, pbc,
                     &pidlTemp, (LPOLESTR) szNext, pchEaten, pdwAttributes);
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+            ERR( "P30U: SH_DESK_NEXT name %s ret 0x%08lx\n", debugstr_w(szNext), hr );
+#endif
         }
         else
         {
@@ -271,6 +274,10 @@ static HRESULT WINAPI ISF_Desktop_fnParseDisplayName (IShellFolder2 * iface,
     *ppidl = pidlTemp;
 
     TRACE ("(%p)->(-- ret=0x%08lx)\n", This, hr);
+
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+    ERR( "P30U: SH_DESK_PARSE name %s ret 0x%08lx\n", debugstr_w(lpszDisplayName), hr );
+#endif
 
     return hr;
 }

@@ -377,6 +377,9 @@ IShellFolder_fnParseDisplayName (IShellFolder2 * iface,
             }
             else hr = _ILCreateFromPathW(szPath, &pidlTemp);
 
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+            ERR( "P30U: SH_FS_LAST path %s ret 0x%08lx pidl %p\n", debugstr_w(szPath), hr, (void *)pidlTemp );
+#endif
             if (pidlTemp && pdwAttributes && *pdwAttributes)
                 hr = SHELL32_GetItemAttributes(&This->IShellFolder2_iface, pidlTemp, pdwAttributes);
         }
