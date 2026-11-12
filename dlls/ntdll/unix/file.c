@@ -5077,10 +5077,19 @@ NTSTATUS open_unix_file( HANDLE *handle, const char *unix_name, ACCESS_MASK acce
         wineweb_host_log( 0, "P30W cfg ", 8 );
         wineweb_host_log( 0, config_dir ? config_dir : "(null)", config_dir ? strlen(config_dir) : 6 );
         {
-            /* the neighborhood: what buffer overlaps the static */
+            /* the neighborhood, hex: 8 bytes before, 8 at, 8 after */
             const unsigned char *p = (const unsigned char *)config_dir;
-            wineweb_host_log( 0, "P30W near ", 10 );
-            wineweb_host_log( 0, (const char *)(p - 16), 48 );
+            static const char hex[] = "0123456789abcdef";
+            char l0[8], l1[8], l2[8];
+            for (int i = 0; i < 8; i++)
+            {
+                l0[i*2] = hex[(p[-8+i] >> 4) & 0xf]; l0[i*2+1] = hex[p[-8+i] & 0xf];
+                l1[i*2] = hex[(p[i] >> 4) & 0xf];    l1[i*2+1] = hex[p[i] & 0xf];
+                l2[i*2] = hex[(p[8+i] >> 4) & 0xf];  l2[i*2+1] = hex[p[8+i] & 0xf];
+            }
+            wineweb_host_log( 0, "P30W n0 ", 8 ); wineweb_host_log( 0, l0, 16 );
+            wineweb_host_log( 0, "P30W n1 ", 8 ); wineweb_host_log( 0, l1, 16 );
+            wineweb_host_log( 0, "P30W n2 ", 8 ); wineweb_host_log( 0, l2, 16 );
         }
         wineweb_host_log( 0, "P30W unx ", 8 );
         wineweb_host_log( 0, unix_name, strlen(unix_name) > 48 ? 48 : strlen(unix_name) );
