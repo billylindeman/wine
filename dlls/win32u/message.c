@@ -441,9 +441,17 @@ static BOOL init_window_call_params( struct win_proc_params *params, HWND hwnd, 
 
     user_check_not_lock();
 
-    if (!is_current_thread_window( hwnd )) return FALSE;
-    if (!(win = get_win_ptr( hwnd ))) return FALSE;
-    if (win == WND_OTHER_PROCESS || win == WND_DESKTOP) return FALSE;
+#ifdef __wasm__ /* wineweb: TEMP P30p diag (removed with the fix) */
+#define P30P_IWCP_LOG(what) \
+    do { if (msg == WM_GETDLGCODE) \
+        ERR( "P30P: IWCP dlgcode %s hwnd %x\n", what, (unsigned)(UINT_PTR)hwnd ); } while (0)
+#else
+#define P30P_IWCP_LOG(what) do {} while (0)
+#endif
+
+    if (!is_current_thread_window( hwnd )) { P30P_IWCP_LOG( "not-current-thread" ); return FALSE; }
+    if (!(win = get_win_ptr( hwnd ))) { P30P_IWCP_LOG( "no-win-ptr" ); return FALSE; }
+    if (win == WND_OTHER_PROCESS || win == WND_DESKTOP) { P30P_IWCP_LOG( "other-process-win" ); return FALSE; }
     params->func = get_window_wndproc_handle( hwnd, &is_ansi );
     params->ansi_dst = is_ansi;
     is_dialog = win->dlgInfo != NULL;
@@ -476,9 +484,9 @@ static LRESULT dispatch_win_proc_params( struct win_proc_params *params, size_t 
 
 #ifdef __wasm__ /* wineweb: the in-module guest-call primitive (patch 0023) */
     if (params->msg == WM_GETDLGCODE) /* wineweb: TEMP P30p diag (removed with the fix) */
-        ERR( "P30P: DISPATCH dlgcode ansi %d ansi_dst %d procW %p procA %p\n",
-             params->ansi, params->ansi_dst, (void *)(UINT_PTR)params->procW,
-             (void *)(UINT_PTR)params->procA );
+        ERR( "P30P: DISPATCH dlgcode hwnd %x ansi %d ansi_dst %d procW %p procA %p\n",
+             (unsigned)(UINT_PTR)params->hwnd, params->ansi, params->ansi_dst,
+             (void *)(UINT_PTR)params->procW, (void *)(UINT_PTR)params->procA );
     if (thread_info->msg_call_depth > MAX_WINPROC_RECURSION) return 0;
     thread_info->msg_call_depth++;
 #define WINPROC_PROC16 ((void *)1) /* wineweb: class.c's 16-bit placeholder (not shared via a header) */
@@ -4516,10 +4524,37 @@ static BOOL process_message( struct send_message_info *info, DWORD_PTR *res_ptr,
     BOOL ret;
     LRESULT result = 0;
 
-    if (is_broadcast( info->hwnd )) return broadcast_message( info, res_ptr );
+#ifdef __wasm__ /* wineweb: TEMP P30p diag (removed with the fix) */
+    if (info->msg == WM_GETDLGCODE)
+        ERR( "P30P: PM dlgcode hwnd %x\n", (unsigned)(UINT_PTR)info->hwnd );
+#endif
 
-    if (!(info->dest_tid = get_window_thread( info->hwnd, &dest_pid ))) return FALSE;
-    if (is_exiting_thread( info->dest_tid )) return FALSE;
+    if (is_broadcast( info->hwnd ))
+    {
+#ifdef __wasm__ /* wineweb: TEMP P30p diag (removed with the fix) */
+        if (info->msg == WM_GETDLGCODE)
+            ERR( "P30P: PM dlgcode broadcast hwnd %x\n", (unsigned)(UINT_PTR)info->hwnd );
+#endif
+        return broadcast_message( info, res_ptr );
+    }
+
+    if (!(info->dest_tid = get_window_thread( info->hwnd, &dest_pid )))
+    {
+#ifdef __wasm__ /* wineweb: TEMP P30p diag (removed with the fix) */
+        if (info->msg == WM_GETDLGCODE)
+            ERR( "P30P: PM dlgcode no-window-thread hwnd %x\n", (unsigned)(UINT_PTR)info->hwnd );
+#endif
+        return FALSE;
+    }
+    if (is_exiting_thread( info->dest_tid ))
+    {
+#ifdef __wasm__ /* wineweb: TEMP P30p diag (removed with the fix) */
+        if (info->msg == WM_GETDLGCODE)
+            ERR( "P30P: PM dlgcode exiting-thread hwnd %x tid %x\n",
+                 (unsigned)(UINT_PTR)info->hwnd, (unsigned)info->dest_tid );
+#endif
+        return FALSE;
+    }
 
     if (info->params && info->dest_tid == GetCurrentThreadId() &&
         !is_hooked( WH_CALLWNDPROC ) && !is_hooked( WH_CALLWNDPROCRET ) &&

@@ -583,6 +583,11 @@ LRESULT WINAPI SendMessageW( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
 
     params.hwnd = 0;
     retval = NtUserMessageCall( hwnd, msg, wparam, lparam, &params, NtUserSendMessage, FALSE );
+#ifdef __wasm__ /* wineweb: TEMP P30p diag (removed with the fix) */
+    if (msg == WM_GETDLGCODE)
+        ERR( "P30P: SENDMSGW dlgcode hwnd %x retval %x params.hwnd %x\n",
+             (unsigned)(UINT_PTR)hwnd, (unsigned)retval, (unsigned)(UINT_PTR)params.hwnd );
+#endif
     if (params.hwnd) retval = dispatch_send_message( &params, wparam, lparam );
     return retval;
 }
