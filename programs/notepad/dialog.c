@@ -277,8 +277,15 @@ static SAVE_STATUS DoSaveFile(LPCWSTR szFileName, ENCODING enc)
         break;
     }
 
+#ifdef __wasm__ /* wineweb: TEMP P30q diag (removed with the fix) */
+    ERR( "P30Q: DOSAVE path %s size %u\n", debugstr_w(szFileName), size );
+#endif
+
     hFile = CreateFileW(szFileName, GENERIC_WRITE, FILE_SHARE_WRITE,
                        NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+#ifdef __wasm__ /* wineweb: TEMP P30q diag (removed with the fix) */
+    ERR( "P30Q: DOSAVE_CREATE handle %p err %ld\n", hFile, GetLastError() );
+#endif
     if(hFile == INVALID_HANDLE_VALUE)
     {
         ShowLastError();
@@ -287,11 +294,17 @@ static SAVE_STATUS DoSaveFile(LPCWSTR szFileName, ENCODING enc)
     }
     if (!WriteFile(hFile, pBytes, size, &dwNumWrite, NULL))
     {
+#ifdef __wasm__ /* wineweb: TEMP P30q diag (removed with the fix) */
+        ERR( "P30Q: DOSAVE_WRITE_FAILED err %ld\n", GetLastError() );
+#endif
         ShowLastError();
         CloseHandle(hFile);
         free(pBytes);
         return SAVE_FAILED;
     }
+#ifdef __wasm__ /* wineweb: TEMP P30q diag (removed with the fix) */
+    ERR( "P30Q: DOSAVE_WRITE num %u\n", dwNumWrite );
+#endif
     SetEndOfFile(hFile);
     CloseHandle(hFile);
     free(pBytes);
@@ -673,7 +686,15 @@ BOOL DIALOG_FileSaveAs(VOID)
 
 retry:
     if (!GetSaveFileNameW(&saveas))
+    {
+#ifdef __wasm__ /* wineweb: TEMP P30q diag (removed with the fix) */
+        ERR( "P30Q: SAVEAS refused\n" );
+#endif
         return FALSE;
+    }
+#ifdef __wasm__ /* wineweb: TEMP P30q diag (removed with the fix) */
+    ERR( "P30Q: SAVEAS ok path %s enc %d\n", debugstr_w(szPath), Globals.encOfnCombo );
+#endif
 
     switch (DoSaveFile(szPath, Globals.encOfnCombo))
     {
