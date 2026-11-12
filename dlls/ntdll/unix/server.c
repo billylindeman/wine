@@ -281,6 +281,7 @@ static inline unsigned int wait_reply( int reply_fd, struct __server_request_inf
 
 #ifdef __wasm__ /* wineweb: the sync miniserver (patch 0023) */
 extern unsigned int wineweb_server_call( void *req_ptr );
+#include "wineweb_shim.h"
 #endif
 
 /***********************************************************************
