@@ -1660,6 +1660,9 @@ static LRESULT FILEDLG95_InitControls(HWND hwnd)
       himl = ImageList_Create(GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), ILC_COLOR32, 4, 1);
 
       filedlg_collect_places_pidls(fodInfos);
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+      ERR( "P30U: FOD_PLACES pidls done\n" );
+#endif
       for (i = 0; i < ARRAY_SIZE(fodInfos->places); i++)
       {
           int index;
@@ -1927,7 +1930,13 @@ static LRESULT FILEDLG95_InitControls(HWND hwnd)
   }
 
   /* Initialize the filter combo box */
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+  ERR( "P30U: FOD_FILETYPE_Init begin\n" );
+#endif
   FILEDLG95_FILETYPE_Init(hwnd);
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+  ERR( "P30U: FOD_FILETYPE_Init done\n" );
+#endif
 
   return 0;
 }
@@ -2012,13 +2021,28 @@ static LRESULT FILEDLG95_FillControls(HWND hwnd, WPARAM wParam, LPARAM lParam)
   }
 
   /* Initialise shell objects */
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+  ERR( "P30U: FOD_SHELL_Init begin\n" );
+#endif
   FILEDLG95_SHELL_Init(hwnd);
 
   /* Initialize the Look In combo box */
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+  ERR( "P30U: FOD_LOOKIN_Init begin\n" );
+#endif
   FILEDLG95_LOOKIN_Init(fodInfos->DlgInfos.hwndLookInCB);
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+  ERR( "P30U: FOD_LOOKIN_Init done\n" );
+#endif
 
   /* Browse to the initial directory */
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+  ERR( "P30U: FOD_BROWSE initdir begin\n" );
+#endif
   IShellBrowser_BrowseObject(fodInfos->Shell.FOIShellBrowser,pidlItemId, SBSP_ABSOLUTE);
+#ifdef __wasm__ /* wineweb: TEMP P30u diag (removed with the fix) */
+  ERR( "P30U: FOD_BROWSE initdir done\n" );
+#endif
 
   ILFree(pidlItemId);
 
