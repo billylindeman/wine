@@ -1,4 +1,6 @@
 MODULE    = cryptbase.dll
+IMPORTLIB = cryptbase
+STATICLIB = libcryptbase.a
 
 SOURCES = \
 	cryptbase_main.c \
