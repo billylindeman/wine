@@ -298,7 +298,7 @@ int WINAPI DECLSPEC_HOTPATCH SysFreeString(BSTR str)
             if(cache_entry->buf[(cache_entry->head+i) % BUCKET_BUFFER_SIZE] == bstr) {
                 WARN_(heap)("String already is in cache!\n");
                 LeaveCriticalSection(&cs_bstr_cache);
-                return;
+                return 0;
             }
         }
 
