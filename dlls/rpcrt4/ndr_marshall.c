@@ -1635,10 +1635,14 @@ void WINAPI NdrPointerFree(PMIDL_STUB_MESSAGE pStubMsg,
 /***********************************************************************
  *           NdrSimpleTypeMarshall [RPCRT4.@]
  */
-void WINAPI NdrSimpleTypeMarshall( PMIDL_STUB_MESSAGE pStubMsg, unsigned char* pMemory,
+LONG WINAPI NdrSimpleTypeMarshall( PMIDL_STUB_MESSAGE pStubMsg, unsigned char* pMemory,
                                    unsigned char FormatChar )
 {
+    /* The P41 wire: the spec's implicit-int return is the exact-type
+     * cross-module contract (the P30u FreeMRUList precedent) — the body
+     * was void; the callers ignore the return. */
     NdrBaseTypeMarshall(pStubMsg, pMemory, &FormatChar);
+    return 0;
 }
 
 /***********************************************************************
@@ -1650,7 +1654,7 @@ void WINAPI NdrSimpleTypeMarshall( PMIDL_STUB_MESSAGE pStubMsg, unsigned char* p
  *  Doesn't check that the buffer is long enough before copying, so the caller
  * should do this.
  */
-void WINAPI NdrSimpleTypeUnmarshall( PMIDL_STUB_MESSAGE pStubMsg, unsigned char* pMemory,
+LONG WINAPI NdrSimpleTypeUnmarshall( PMIDL_STUB_MESSAGE pStubMsg, unsigned char* pMemory,
                                      unsigned char FormatChar )
 {
 #define BASE_TYPE_UNMARSHALL(type) \
@@ -1721,6 +1725,8 @@ void WINAPI NdrSimpleTypeUnmarshall( PMIDL_STUB_MESSAGE pStubMsg, unsigned char*
         FIXME("Unhandled base type: 0x%02x\n", FormatChar);
     }
 #undef BASE_TYPE_UNMARSHALL
+    /* The P41 wire: the spec's implicit-int return (the P30u precedent). */
+    return 0;
 }
 
 /***********************************************************************

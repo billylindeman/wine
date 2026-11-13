@@ -604,9 +604,9 @@ RPCRTAPI RPC_STATUS RPC_ENTRY
 RPCRTAPI void RPC_ENTRY
   RpcSsDestroyClientContext( void **ContextHandle );
 
-RPCRTAPI void RPC_ENTRY
+RPCRTAPI LONG RPC_ENTRY
   NdrSimpleTypeMarshall( PMIDL_STUB_MESSAGE pStubMsg, unsigned char* pMemory, unsigned char FormatChar );
-RPCRTAPI void RPC_ENTRY
+RPCRTAPI LONG RPC_ENTRY
   NdrSimpleTypeUnmarshall( PMIDL_STUB_MESSAGE pStubMsg, unsigned char* pMemory, unsigned char FormatChar );
 
 RPCRTAPI unsigned char* RPC_ENTRY
@@ -736,7 +736,7 @@ RPCRTAPI void* RPC_ENTRY
 RPCRTAPI void RPC_ENTRY
   NdrClientInitialize( PRPC_MESSAGE pRpcMessage, PMIDL_STUB_MESSAGE pStubMsg,
                        PMIDL_STUB_DESC pStubDesc, unsigned int ProcNum );
-RPCRTAPI void RPC_ENTRY
+RPCRTAPI LONG RPC_ENTRY
   NdrClientInitializeNew( PRPC_MESSAGE pRpcMessage, PMIDL_STUB_MESSAGE pStubMsg,
                           PMIDL_STUB_DESC pStubDesc, unsigned int ProcNum );
 RPCRTAPI unsigned char* RPC_ENTRY

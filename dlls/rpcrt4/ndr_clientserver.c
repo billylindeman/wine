@@ -44,7 +44,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(rpc);
 /************************************************************************
  *             NdrClientInitializeNew [RPCRT4.@]
  */
-void WINAPI NdrClientInitializeNew( PRPC_MESSAGE pRpcMessage, PMIDL_STUB_MESSAGE pStubMsg, 
+LONG WINAPI NdrClientInitializeNew( PRPC_MESSAGE pRpcMessage, PMIDL_STUB_MESSAGE pStubMsg, 
                                     PMIDL_STUB_DESC pStubDesc, unsigned int ProcNum )
 {
   TRACE("(pRpcMessage == ^%p, pStubMsg == ^%p, pStubDesc == ^%p, ProcNum == %d)\n",
@@ -99,6 +99,8 @@ void WINAPI NdrClientInitializeNew( PRPC_MESSAGE pRpcMessage, PMIDL_STUB_MESSAGE
   pStubMsg->pCorrInfo = NULL;
   pStubMsg->pCorrMemory = NULL;
   pStubMsg->pMemoryList = NULL;
+  /* The P41 wire: the spec's implicit-int return (the P30u precedent). */
+  return 0;
 }
 
 /***********************************************************************
