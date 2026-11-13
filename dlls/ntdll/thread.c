@@ -27,6 +27,11 @@
 #include "winternl.h"
 #include "wine/debug.h"
 #include "ntdll_misc.h"
+
+#ifdef __wasm__ /* wineweb: the S2 diag group (the __wine_dbg_write route above) */
+__attribute__((import_module("wineweb_host"), import_name("log")))
+extern void wineweb_crt0_log(int level, const char *ptr, unsigned len);
+#endif
 #include "ddk/wdm.h"
 #include "wine/exception.h"
 
@@ -171,9 +176,19 @@ int __cdecl __wine_dbg_header( enum __wine_debug_class cls, struct __wine_debug_
  */
 int WINAPI __wine_dbg_write( const char *str, unsigned int len )
 {
+#ifdef __wasm__ /* wineweb: the unix-call dispatcher cannot serve on wasm
+                 * (the ELF dlopen world — __wine_unix_call_dispatcher never
+                 * installs, and the call through its null fn-ptr slot is the
+                 * "null function" trap). The debug output rides the S2 diag
+                 * group — the winecrt0 debug.c fallbacks' own route. */
+    if (!len) return 0;
+    wineweb_crt0_log( 0 /* info */, str, len );
+    return len;
+#else
     struct wine_dbg_write_params params = { str, len };
 
     return WINE_UNIX_CALL( unix_wine_dbg_write, &params );
+#endif
 }
 
 /***********************************************************************
