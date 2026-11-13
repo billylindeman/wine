@@ -1943,9 +1943,10 @@ HRESULT WINAPI DECLSPEC_HOTPATCH CoGetClassObject(REFCLSID rclsid, DWORD clscont
 /***********************************************************************
  *           CoFreeUnusedLibraries    (combase.@)
  */
-void WINAPI DECLSPEC_HOTPATCH CoFreeUnusedLibraries(void)
+int WINAPI DECLSPEC_HOTPATCH CoFreeUnusedLibraries(void)
 {
     CoFreeUnusedLibrariesEx(INFINITE, 0);
+    return 0;
 }
 
 /***********************************************************************
@@ -3011,7 +3012,7 @@ HRESULT WINAPI DECLSPEC_HOTPATCH CoInitializeEx(void *reserved, DWORD model)
 /***********************************************************************
  *           CoUninitialize    (combase.@)
  */
-void WINAPI DECLSPEC_HOTPATCH CoUninitialize(void)
+int WINAPI DECLSPEC_HOTPATCH CoUninitialize(void)
 {
     struct tlsdata *tlsdata;
     struct init_spy *cursor, *next;
@@ -3020,7 +3021,7 @@ void WINAPI DECLSPEC_HOTPATCH CoUninitialize(void)
     TRACE("\n");
 
     if (FAILED(com_get_tlsdata(&tlsdata)))
-        return;
+        return 0;
 
     lock_init_spies(tlsdata);
     LIST_FOR_EACH_ENTRY_SAFE(cursor, next, &tlsdata->spies, struct init_spy, entry)
@@ -3041,7 +3042,7 @@ void WINAPI DECLSPEC_HOTPATCH CoUninitialize(void)
         }
         unlock_init_spies(tlsdata);
 
-        return;
+        return 0;
     }
 
     leave_apartment(tlsdata);
@@ -3071,6 +3072,7 @@ void WINAPI DECLSPEC_HOTPATCH CoUninitialize(void)
         if (cursor->spy) IInitializeSpy_PostUninitialize(cursor->spy, tlsdata->inits);
     }
     unlock_init_spies(tlsdata);
+    return 0;
 }
 
 /***********************************************************************

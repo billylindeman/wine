@@ -215,14 +215,14 @@ HRESULT WINAPI DECLSPEC_HOTPATCH OleInitialize(LPVOID reserved)
 /******************************************************************************
  *		OleUninitialize	[OLE32.@]
  */
-void WINAPI DECLSPEC_HOTPATCH OleUninitialize(void)
+int WINAPI DECLSPEC_HOTPATCH OleUninitialize(void)
 {
   TRACE("()\n");
 
   if (COM_CurrentInfo()->ole_inits == 0)
   {
     WARN("ole_inits is already 0\n");
-    return ;
+    return 0;
   }
   /*
    * If we hit the bottom of the lock stack, free the libraries.
@@ -249,6 +249,7 @@ void WINAPI DECLSPEC_HOTPATCH OleUninitialize(void)
    * Then, uninitialize the COM libraries.
    */
   CoUninitialize();
+  return 0;
 }
 
 /******************************************************************************

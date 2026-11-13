@@ -270,7 +270,7 @@ static inline IMalloc *get_malloc(void)
  *  See BSTR.
  *  str may be NULL, in which case this function does nothing.
  */
-void WINAPI DECLSPEC_HOTPATCH SysFreeString(BSTR str)
+int WINAPI DECLSPEC_HOTPATCH SysFreeString(BSTR str)
 {
     bstr_cache_entry_t *cache_entry;
     bstr_t *bstr;
@@ -278,13 +278,13 @@ void WINAPI DECLSPEC_HOTPATCH SysFreeString(BSTR str)
     SIZE_T alloc_size;
 
     if(!str)
-        return;
+        return 0;
 
     bstr = bstr_from_str(str);
 
     alloc_size = IMalloc_GetSize(malloc, bstr);
     if (alloc_size == ~0UL)
-        return;
+        return 0;
 
     cache_entry = get_cache_entry_from_alloc_size(alloc_size);
     if(cache_entry) {
@@ -313,13 +313,14 @@ void WINAPI DECLSPEC_HOTPATCH SysFreeString(BSTR str)
             }
 
             LeaveCriticalSection(&cs_bstr_cache);
-            return;
+            return 0;
         }
 
         LeaveCriticalSection(&cs_bstr_cache);
     }
 
     CoTaskMemFree(bstr);
+    return 0;
 }
 
 /******************************************************************************

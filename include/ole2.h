@@ -121,7 +121,7 @@ WINOLE32API HRESULT     WINAPI OleCreateDefaultHandler(REFCLSID clsid, LPUNKNOWN
 WINOLE32API HRESULT     WINAPI OleCreateEmbeddingHelper(REFCLSID clsid, LPUNKNOWN pUnkOuter, DWORD flags, IClassFactory *pCF, REFIID riid, LPVOID* ppvObj);
 WINOLE32API HRESULT     WINAPI CreateOleAdviseHolder (LPOLEADVISEHOLDER *ppOAHolder);
 WINOLE32API HRESULT     WINAPI OleInitialize(LPVOID pvReserved);
-WINOLE32API void        WINAPI OleUninitialize(void);
+WINOLE32API int        WINAPI OleUninitialize(void);
 WINOLE32API BOOL        WINAPI IsValidInterface(LPUNKNOWN punk);
 WINOLE32API DWORD       WINAPI OleBuildVersion(VOID);
 

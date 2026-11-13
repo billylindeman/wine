@@ -544,11 +544,12 @@ static inline HRESULT VARIANT_ValidateType(VARTYPE vt)
  *
  * Since Windows 8.1 whole structure is initialized, before that only type field was reset to VT_EMPTY.
  */
-void WINAPI VariantInit(VARIANTARG* pVarg)
+int WINAPI VariantInit(VARIANTARG* pVarg)
 {
     TRACE("(%p)\n", pVarg);
 
     memset(pVarg, 0, sizeof(*pVarg));
+    return 0;
 }
 
 HRESULT VARIANT_ClearInd(VARIANTARG *pVarg)
