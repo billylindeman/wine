@@ -2,6 +2,9 @@ EXTRADEFS = -D_RPCRT4_ -DMSWMSG
 MODULE    = rpcrt4.dll
 IMPORTLIB = rpcrt4
 STATICLIB = librpcrt4.a
+# The guest wire is i386 (Win32): widl's default target is the build host
+# (win64), which generates 64-bit format strings the guest cannot read.
+EXTRAIDLFLAGS = --win32
 IMPORTS   = uuid advapi32
 DELAYIMPORTS = iphlpapi wininet secur32 user32 ws2_32 ole32 oleaut32
 

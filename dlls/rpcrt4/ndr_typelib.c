@@ -882,7 +882,7 @@ static unsigned int get_stack_size(ITypeInfo *typeinfo, TYPEDESC *desc, unsigned
         break;
     }
 
-#ifdef __i386__
+#if defined(__i386__) || defined(__WINE_GUEST_I386__) /* the guest wire is i386 */
     *align = sizeof(void *);
 #endif
     if (byval)
@@ -1256,7 +1256,7 @@ static void write_proc_func_header(ITypeInfo *typeinfo, FUNCDESC *desc,
     WRITE_CHAR (proc, *proclen, 0x47);  /* HasExtensions | HasReturn | ClientMustSize | ServerMustSize */
     WRITE_CHAR (proc, *proclen, desc->cParams + 1); /* incl. return value */
 
-#ifdef __i386__
+#if defined(__i386__) || defined(__WINE_GUEST_I386__) /* the guest wire is i386 */
     WRITE_CHAR (proc, *proclen, 8);  /* extension size */
     WRITE_CHAR (proc, *proclen, 1);  /* HasNewCorrDesc */
     WRITE_SHORT(proc, *proclen, 0);  /* ClientCorrHint */

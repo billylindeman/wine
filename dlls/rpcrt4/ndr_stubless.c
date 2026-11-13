@@ -1119,8 +1119,10 @@ LONG_PTR WINAPI ndr_stubless_client_call( unsigned int index, void **args, void 
 #ifdef __x86_64__
                 unsigned short fpu_mask = *(unsigned short *)(ext + 1);
                 for (int i = 0; i < 4; i++, fpu_mask >>= 2) if (fpu_mask & 3) args[i] = fpu_regs[i];
-#else
+#elif defined(__arm__) || defined(__aarch64__)
                 stack_top = args_regs_to_stack( args, fpu_regs, hdr );
+#else
+                /* wasm: the ABI passes every arg on the stack; fpu_regs is unused */
 #endif
             }
         }

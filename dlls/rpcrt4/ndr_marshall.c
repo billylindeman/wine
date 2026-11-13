@@ -45,7 +45,7 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(ole);
 
-#if defined(__i386__)
+#if defined(__i386__) || defined(__WINE_GUEST_I386__) /* the guest wire is i386 */
 # define LITTLE_ENDIAN_UINT32_WRITE(pchar, uint32) \
     (*((UINT32 *)(pchar)) = (uint32))
 

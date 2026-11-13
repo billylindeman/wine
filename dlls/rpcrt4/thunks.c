@@ -231,7 +231,9 @@ __ASM_GLOBAL_FUNC( call_stubless_func,
 
 #endif  /* __i386__ */
 
+#if defined(__i386__) || defined(__x86_64__) || defined(__arm__) || defined(__aarch64__) || defined(__arm64ec__)
 __ASM_GLOBAL_FUNC( stubless_thunks, ALL_THUNK_ENTRIES )
+#endif
 
 #undef T
 
@@ -288,7 +290,9 @@ __ASM_GLOBAL_FUNC( stubless_thunks, ALL_THUNK_ENTRIES )
 
 #endif  /* __i386__ */
 
+#if defined(__i386__) || defined(__x86_64__) || defined(__arm__) || defined(__aarch64__) || defined(__arm64ec__)
 __ASM_GLOBAL_FUNC( vtbl_thunks, ALL_THUNK_ENTRIES )
+#endif
 
 #undef T
 
