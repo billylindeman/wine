@@ -1,6 +1,7 @@
 EXTRADEFS = -D_RPCRT4_ -DMSWMSG
 MODULE    = rpcrt4.dll
 IMPORTLIB = rpcrt4
+STATICLIB = librpcrt4.a
 IMPORTS   = uuid advapi32
 DELAYIMPORTS = iphlpapi wininet secur32 user32 ws2_32 ole32 oleaut32
 
