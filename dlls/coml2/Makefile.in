@@ -1,6 +1,7 @@
 EXTRADEFS = -DWINOLE32API=
 MODULE    = coml2.dll
 IMPORTLIB = coml2
+STATICLIB = libcoml2.a
 IMPORTS   = uuid
 
 SOURCES = \

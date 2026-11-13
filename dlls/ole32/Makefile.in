@@ -1,6 +1,8 @@
 EXTRADEFS = -D_OLE32_
 MODULE    = ole32.dll
 IMPORTLIB = ole32
+STATICLIB = libole32.a
+EXTRAIDLFLAGS = --win32
 IMPORTS   = uuid advapi32 user32 gdi32 combase rpcrt4 kernelbase coml2
 DELAYIMPORTS = oleaut32
 
