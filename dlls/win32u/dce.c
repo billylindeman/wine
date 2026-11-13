@@ -628,6 +628,18 @@ struct window_surface *window_surface_create( const struct window_surface_funcs 
 
     memset( window_surface_get_color( surface, info ), 0xff, info->bmiHeader.biSizeImage );
 
+#ifdef __wasm__ /* wineweb: the P37 band tracer: the DIB's bits vs the drv band */
+    {
+        void *bits = window_surface_get_color( surface, info );
+        UINT_PTR lo = (UINT_PTR)bits, hi = lo + info->bmiHeader.biSizeImage;
+        if (lo < 0x7fe80000u && hi > 0x7fe00000u)
+            ERR( "WWBAND: the window DIB's bits %#lx..%#lx land inside the drv band 0x7fe00000..+0x80000 (surf %ux%u hwnd %p)\n",
+                 (unsigned long)lo, (unsigned long)hi,
+                 (unsigned)(surface->rect.right - surface->rect.left),
+                 (unsigned)(surface->rect.bottom - surface->rect.top), hwnd );
+    }
+#endif
+
     TRACE( "created surface %p for hwnd %p rect %s\n", surface, hwnd, wine_dbgstr_rect( &surface->rect ) );
     return surface;
 }

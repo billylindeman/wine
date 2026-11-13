@@ -1559,6 +1559,15 @@ HBITMAP WINAPI NtGdiCreateDIBSection( HDC hdc, HANDLE section, DWORD offset, con
     }
     bmp->dib.dshSection = section;
     bmp->dib.dsOffset = offset;
+#ifdef __wasm__ /* wineweb: the P37 band tracer: any DIB's bits vs the drv band */
+    {
+        UINT_PTR blo = (UINT_PTR)bmp->dib.dsBm.bmBits, bhi = blo + bmp->dib.dsBmih.biSizeImage;
+        if (blo < 0x7fe80000u && bhi > 0x7fe00000u)
+            ERR( "WWBAND: the DIB's bits %#lx..%#lx land inside the drv band 0x7fe00000..+0x80000 (%ux%u)\n",
+                 (unsigned long)blo, (unsigned long)bhi,
+                 (unsigned)bmp->dib.dsBmih.biWidth, (unsigned)abs( bmp->dib.dsBmih.biHeight ) );
+    }
+#endif
 
     if ((ret = alloc_gdi_handle( &bmp->obj, NTGDI_OBJ_BITMAP, &dib_funcs )))
     {
