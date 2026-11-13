@@ -3141,6 +3141,38 @@ HRESULT WINAPI CoGetApartmentType(APTTYPE *type, APTTYPEQUALIFIER *qualifier)
  *  MSDN claims that multiple interface registrations are legal, but we
  *  can't do that with our current implementation.
  */
+#ifdef __wasm__ /* wineweb: the guest-object vtable calls ride the nested call (patch 0024) */
+extern unsigned int wineweb_guest_call( unsigned int proc, unsigned int hwnd, unsigned int msg,
+                                        unsigned int wparam, unsigned int lparam );
+/* The pUnk passed to CoRegisterClassObject is the caller's own object — a
+ * guest PE's static factory in this runtime (the explorer boot's
+ * shellwindows_init, desktop.c:2572) — and its vtable entries are guest
+ * VAs, not the wasm toolchain's fn-ptr table slots. The raw
+ * IUnknown_AddRef/IUnknown_Release call_indirect reads the guest VA as a
+ * table index and traps out of bounds. Discriminate exactly like win32u's
+ * dispatch_win_proc_params (patch 0023): a guest VA (the image lives
+ * at/below the corridor end) rides the nested guest call — the callee's
+ * own ret ends it and rex hands the caller's esp back word-for-word (the
+ * #13 seed contract), so the 1-arg stdcall AddRef/Release is safe on the
+ * 4-arg seed — a builtin's small table index rides the raw call. */
+static inline void wineweb_iunknown_addref( IUnknown *obj )
+{
+    UINT_PTR fn = (UINT_PTR)obj->lpVtbl->AddRef;
+    if (fn >= 0x400000u && fn < 0x20000000u)
+        wineweb_guest_call( (unsigned)fn, (unsigned)(UINT_PTR)obj, 0, 0, 0 );
+    else
+        IUnknown_AddRef( obj );
+}
+static inline void wineweb_iunknown_release( IUnknown *obj )
+{
+    UINT_PTR fn = (UINT_PTR)obj->lpVtbl->Release;
+    if (fn >= 0x400000u && fn < 0x20000000u)
+        wineweb_guest_call( (unsigned)fn, (unsigned)(UINT_PTR)obj, 0, 0, 0 );
+    else
+        IUnknown_Release( obj );
+}
+#endif
+
 HRESULT WINAPI CoRegisterClassObject(REFCLSID rclsid, IUnknown *object, DWORD clscontext,
         DWORD flags, DWORD *cookie)
 {
@@ -3179,12 +3211,12 @@ HRESULT WINAPI CoRegisterClassObject(REFCLSID rclsid, IUnknown *object, DWORD cl
         {
             if (clscontext & CLSCTX_LOCAL_SERVER)
                 hr = CoLockObjectExternal(found_object, TRUE, FALSE);
-            IUnknown_Release(found_object);
+            wineweb_iunknown_release( found_object );
             apartment_release(apt);
             return hr;
         }
 
-        IUnknown_Release(found_object);
+        wineweb_iunknown_release( found_object );
         ERR("object already registered for class %s\n", debugstr_guid(rclsid));
         apartment_release(apt);
         return CO_E_OBJISREG;
@@ -3206,7 +3238,7 @@ HRESULT WINAPI CoRegisterClassObject(REFCLSID rclsid, IUnknown *object, DWORD cl
         newclass->cookie = InterlockedIncrement(&next_cookie);
 
     newclass->object = object;
-    IUnknown_AddRef(newclass->object);
+    wineweb_iunknown_addref( newclass->object );
 
     EnterCriticalSection(&registered_classes_cs);
     list_add_tail(&registered_classes, &newclass->entry);
