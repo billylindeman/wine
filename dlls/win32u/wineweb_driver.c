@@ -406,7 +406,16 @@ LOUD_STUB( BOOL,    SetCursorPos, (INT x, INT y), (x, y), FALSE )
 LOUD_STUB( void,    SetCursor, (HWND hwnd, HCURSOR handle), (hwnd, handle), )
 LOUD_STUB( void,    Beep, (void), (), )
 LOUD_STUB( void,    ThreadDetach, (void), (), )
-LOUD_STUB( BOOL,    CreateDesktop, (const WCHAR *name, UINT w, UINT h), (name, w, h), FALSE )
+/* The virtual-desktop create (win32u winstation.c:563-570): the driver
+ * accepts or win32u CLOSES the desktop. The wasm presentation has no root
+ * window to resize — the virtual-desktop pixel shape rides wine's own
+ * display cache (the update_display_cache(TRUE) after this call) — so the
+ * honest serve is the accept, wine's own "nothing to resize" shape
+ * (winex11's CreateDesktop returns TRUE once the root window is sized). */
+static BOOL wweb_CreateDesktop( const WCHAR *name, UINT w, UINT h )
+{
+    return TRUE;
+}
 LOUD_STUB( BOOL,    GetWindowStyleMasks, (HWND hwnd, UINT style, UINT ex_style, UINT *style_mask, UINT *ex_style_mask), (hwnd, style, ex_style, style_mask, ex_style_mask), FALSE )
 /* The pos-walk surface gate (get_window_surface's `needs_surface`): win32u
  * asks the driver to accept the position walk before building the window
@@ -489,7 +498,7 @@ static const struct user_driver_funcs wineweb_user_driver =
     .pSetCursor = nodrv_SetCursor,
     .pBeep = nodrv_Beep,
     .pThreadDetach = nodrv_ThreadDetach,
-    .pCreateDesktop = nodrv_CreateDesktop,
+    .pCreateDesktop = wweb_CreateDesktop,
     .pGetWindowStyleMasks = nodrv_GetWindowStyleMasks,
     .pWindowPosChanged = wweb_WindowPosChanged,
     .pWindowPosChanging = wweb_WindowPosChanging,
