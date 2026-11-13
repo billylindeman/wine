@@ -2018,10 +2018,10 @@ found:
 /***********************************************************************
  * ReleaseStgMedium [OLE32.@]
  */
-void WINAPI ReleaseStgMedium(
+int WINAPI ReleaseStgMedium(
   STGMEDIUM* pmedium)
 {
-  if (!pmedium) return;
+  if (!pmedium) return 0;
 
   switch (pmedium->tymed)
   {
@@ -2103,6 +2103,7 @@ void WINAPI ReleaseStgMedium(
     IUnknown_Release(pmedium->pUnkForRelease);
     pmedium->pUnkForRelease = 0;
   }
+  return 0;
 }
 
 /***

@@ -386,9 +386,10 @@ void * WINAPI CoTaskMemAlloc(SIZE_T size)
 /***********************************************************************
  *           CoTaskMemFree          (combase.@)
  */
-void WINAPI CoTaskMemFree(void *ptr)
+int WINAPI CoTaskMemFree(void *ptr)
 {
     IMalloc_Free(&allocator.IMalloc_iface, ptr);
+    return 0;
 }
 
 /***********************************************************************
