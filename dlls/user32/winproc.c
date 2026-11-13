@@ -934,9 +934,14 @@ INT_PTR WINPROC_CallDlgProcW( HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam 
 #else
     proc = (DLGPROC)NtUserGetWindowLongW( hwnd, DWLP_DLGPROC );
 #endif
+    ERR( "W8: CallDlgProcW hwnd=%p proc=%p msg=%x\n", hwnd, proc, msg );
     if (!proc) return 0;
     if (!(func = NtUserGetDialogProc( proc, FALSE )) &&
-        !(func = NtUserGetDialogProc( proc, TRUE ))) return 0;
+        !(func = NtUserGetDialogProc( proc, TRUE )))
+    {
+        ERR( "W8: CallDlgProcW: no func resolved for proc %p\n", proc );
+        return 0;
+    }
 
     if (func == WINPROC_PROC16)
     {

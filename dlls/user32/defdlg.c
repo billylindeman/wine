@@ -20,6 +20,9 @@
 
 #include "user_private.h"
 #include "controls.h"
+#include "wine/debug.h"
+
+WINE_DEFAULT_DEBUG_CHANNEL(dialog);
 
 
 /***********************************************************************
@@ -377,6 +380,7 @@ static LRESULT USER_DefDlgProcW( HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
 
     SetWindowLongPtrW( hwnd, DWLP_MSGRESULT, 0 );
     result = WINPROC_CallDlgProcW( hwnd, msg, wParam, lParam );
+    ERR( "W8: DefDlgProcW hwnd=%p msg=%x wp=%lx -> result=%lx\n", hwnd, msg, (long)wParam, (long)result );
 
     if (!result && IsWindow(hwnd))
     {

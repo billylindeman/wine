@@ -2036,6 +2036,7 @@ static LRESULT FILEDLG95_OnWMCommand(HWND hwnd, WPARAM wParam)
   WORD wNotifyCode = HIWORD(wParam); /* notification code */
   WORD id = LOWORD(wParam);         /* item, control, or accelerator identifier */
 
+  ERR( "W8: FileOpenDlgProc95 OnWMCommand wp=%lx\n", (long)wParam );
   switch (id)
   {
     /* OK button */
@@ -2524,6 +2525,8 @@ int FILEDLG95_ValidatePathAction(LPWSTR lpstrPathAndFile, IShellFolder **ppsf,
 
         TRACE("parse now=%s next=%s sf=%p\n",debugstr_w(lpwstrTemp), debugstr_w(lpszTemp), *ppsf);
 
+        ERR( "W8: VP parse: comp=%s remaining=%s\n", debugstr_w(lpwstrTemp), debugstr_w(lpszTemp) );
+
         /* append a backslash to drive letters */
         if(lstrlenW(lpwstrTemp)==2 && lpwstrTemp[1] == ':' &&
            ((lpwstrTemp[0] >= 'a' && lpwstrTemp[0] <= 'z') ||
@@ -2535,6 +2538,7 @@ int FILEDLG95_ValidatePathAction(LPWSTR lpstrPathAndFile, IShellFolder **ppsf,
         dwAttributes = SFGAO_FOLDER;
         if(SUCCEEDED(IShellFolder_ParseDisplayName(*ppsf, hwnd, NULL, lpwstrTemp, &dwEaten, &pidl, &dwAttributes)))
         {
+            ERR( "W8: VP parse OK: comp=%s attr=0x%08x\n", debugstr_w(lpwstrTemp), dwAttributes );
             /* the path component is valid, we have a pidl of the next path component */
             TRACE("parse OK attr=0x%08lx pidl=%p\n", dwAttributes, pidl);
             if(dwAttributes & SFGAO_FOLDER)
@@ -2561,6 +2565,8 @@ int FILEDLG95_ValidatePathAction(LPWSTR lpstrPathAndFile, IShellFolder **ppsf,
         }
         else if (!(flags & OFN_NOVALIDATE))
         {
+            ERR( "W8: VP parse FAILED: comp=%s temp=%d pathmust=%d filemust=%d save=%d\n",
+                 debugstr_w(lpwstrTemp), (int)*lpszTemp, !!(flags & OFN_PATHMUSTEXIST), !!(flags & OFN_FILEMUSTEXIST), isSaveDlg );
             if(*lpszTemp ||	/* points to trailing null for last path element */
                (lpwstrTemp[lstrlenW(lpwstrTemp)-1] == '\\')) /* or if last element ends in '\' */
             {
@@ -2611,14 +2617,20 @@ BOOL FILEDLG95_OnOpen(HWND hwnd)
   LPSHELLFOLDER lpsf = NULL;
   int nOpenAction;
 
+  ERR( "W8: OnOpen entry hwnd=%p fodInfos=%p\n", hwnd, (void *)fodInfos );
+
   TRACE("hwnd=%p\n", hwnd);
 
   /* try to browse the selected item */
   if(BrowseSelectedFolder(hwnd))
+  {
+      ERR( "W8: OnOpen bail: BrowseSelectedFolder TRUE\n" );
       return FALSE;
+  }
 
   /* get the files from the edit control */
   nFileCount = FILEDLG95_FILENAME_GetFileNames(hwnd, &lpstrFileList, &sizeUsed);
+  ERR( "W8: OnOpen filenames=%u sizeUsed=%u\n", nFileCount, sizeUsed );
 
   if(nFileCount == 0)
       return FALSE;
@@ -2665,6 +2677,7 @@ BOOL FILEDLG95_OnOpen(HWND hwnd)
                                              fodInfos->ofnInfos->Flags,
                                              fodInfos->DlgInfos.dwDlgProp & FODPROP_SAVEDLG,
                                              nOpenAction);
+  ERR( "W8: OnOpen validated path=%s action=%d\n", debugstr_w(lpstrPathAndFile), nOpenAction );
   if(!nOpenAction)
       goto ret;
 
@@ -2810,7 +2823,10 @@ BOOL FILEDLG95_OnOpen(HWND hwnd)
 
             /* In Open dialog: if file does not exist try without extension */
             if (!(fodInfos->DlgInfos.dwDlgProp & FODPROP_SAVEDLG) && !PathFileExistsW(lpstrPathAndFile))
-                  lpstrPathAndFile[PathLength] = '\0';
+            {
+              ERR( "W8: OnOpen OPEN: PathFileExists FALSE for %s\n", debugstr_w(lpstrPathAndFile) );
+              lpstrPathAndFile[PathLength] = '\0';
+            }
 
             /* Set/clear the output OFN_EXTENSIONDIFFERENT flag */
             if (*ext)
@@ -2949,7 +2965,12 @@ BOOL FILEDLG95_OnOpen(HWND hwnd)
 
 
           if ( !FILEDLG95_SendFileOK(hwnd, fodInfos) )
+          {
+              ERR( "W8: OnOpen OPEN: SendFileOK FALSE\n" );
 	      goto ret;
+          }
+
+          ERR( "W8: OnOpen OPEN: SendFileOK TRUE — EndDialog(TRUE) next\n" );
 
           FILEDLG95_MRU_save_filename(lpstrPathAndFile);
 

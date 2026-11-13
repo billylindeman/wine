@@ -1299,6 +1299,8 @@ HANDLE WINAPI DECLSPEC_HOTPATCH FindFirstFileExW( LPCWSTR filename, FINDEX_INFO_
 
     TRACE( "%s %d %p %d %p %lx\n", debugstr_w(filename), level, data, search_op, filter, flags );
 
+    ERR( "W8: FFExW entry: file=%s\n", debugstr_w(filename) );
+
     if (flags & ~FIND_FIRST_EX_LARGE_FETCH)
     {
         FIXME("flags not implemented 0x%08lx\n", flags );
@@ -1386,6 +1388,7 @@ HANDLE WINAPI DECLSPEC_HOTPATCH FindFirstFileExW( LPCWSTR filename, FINDEX_INFO_
                          FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_FOR_BACKUP_INTENT );
     if (status != STATUS_SUCCESS)
     {
+        ERR( "W8: FFExW NtOpenFile: status=0x%08x\n", status );
         if (status == STATUS_OBJECT_NAME_NOT_FOUND)
             SetLastError( ERROR_PATH_NOT_FOUND );
         else

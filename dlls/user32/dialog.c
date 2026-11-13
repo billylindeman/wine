@@ -1151,14 +1151,20 @@ BOOL WINAPI IsDialogMessageW( HWND hwndDlg, LPMSG msg )
 {
     INT dlgCode;
 
+    ERR( "W8: IDM entry dlg=%p msg=%x wp=%lx lp=%lx\n", hwndDlg, msg->message, (long)msg->wParam, (long)msg->lParam );
+
     if (!IsWindow( hwndDlg ))
         return FALSE;
 
-    if (NtUserCallMsgFilter( msg, MSGF_DIALOGBOX )) return TRUE;
+    if (NtUserCallMsgFilter( msg, MSGF_DIALOGBOX )) { ERR( "W8: IDM consumed by the msg filter\n" ); return TRUE; }
 
     hwndDlg = WIN_GetFullHandle( hwndDlg );
-    if ((hwndDlg != msg->hwnd) && !IsChild( hwndDlg, msg->hwnd )) return FALSE;
-    if (!NtUserGetAncestor( hwndDlg, GA_PARENT )) return FALSE;
+    if ((hwndDlg != msg->hwnd) && !IsChild( hwndDlg, msg->hwnd ))
+    {
+        ERR( "W8: IDM not-child bail: dlg=%p msg.hwnd=%p\n", hwndDlg, msg->hwnd );
+        return FALSE;
+    }
+    if (!NtUserGetAncestor( hwndDlg, GA_PARENT )) { ERR( "W8: IDM no-parent bail: dlg=%p\n", hwndDlg ); return FALSE; }
 
     hwndDlg = DIALOG_FindMsgDestination(hwndDlg);
 
@@ -1251,19 +1257,23 @@ BOOL WINAPI IsDialogMessageW( HWND hwndDlg, LPMSG msg )
             {
                 DWORD dw;
                 HWND hwndFocus = GetFocus();
+                ERR( "W8: IDM RETURN: dlg=%p focus=%p ischild=%d\n", hwndDlg, hwndFocus, IsChild( hwndDlg, hwndFocus ) );
                 if (IsChild( hwndDlg, hwndFocus ) &&
                     (SendMessageW( hwndFocus, WM_GETDLGCODE, 0, 0 ) & DLGC_DEFPUSHBUTTON))
                 {
+                    ERR( "W8: IDM RETURN: the focus pushbutton arm\n" );
                     SendMessageW( hwndDlg, WM_COMMAND, MAKEWPARAM( GetDlgCtrlID( hwndFocus ), BN_CLICKED ), (LPARAM)hwndFocus );
                 }
                 else if (DC_HASDEFID == HIWORD(dw = SendMessageW (hwndDlg, DM_GETDEFID, 0, 0)))
                 {
                     HWND hwndDef = DIALOG_IdToHwnd(hwndDlg, LOWORD(dw), TRUE);
+                    ERR( "W8: IDM RETURN: defid=%x hwndDef=%p\n", dw, hwndDef );
                     if (!hwndDef || IsWindowEnabled(hwndDef))
                         SendMessageW( hwndDlg, WM_COMMAND, MAKEWPARAM( LOWORD(dw), BN_CLICKED ), (LPARAM)hwndDef);
                 }
                 else
                 {
+                    ERR( "W8: IDM RETURN: the fallback IDOK arm\n" );
                     SendMessageW( hwndDlg, WM_COMMAND, IDOK, (LPARAM)GetDlgItem( hwndDlg, IDOK ) );
                 }
             }
