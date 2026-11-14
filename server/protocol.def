@@ -4361,3 +4361,15 @@ enum inproc_sync_type
     mem_size_t          image_size;     /* the whole session image size */
     /* VARARG(data,bytes); */
 @END
+
+/* wineweb: the attribute setter (P50 — the SetFileAttributesA route). The
+ * mount-backed handles have no unix fd (the file layer's records), so the
+ * fd_set_file_info route is unreachable; the SET arm falls back here on the
+ * GET route's own BAD_DEVICE_TYPE pattern (file.c:5490-5494). The attrs
+ * word is the FILE_ATTRIBUTE_* value; the server maps the READONLY bit onto
+ * its mount's node attribute (the single bit wine's own
+ * fd_set_file_info carries, file.c:5710's shape). */
+@REQ(set_fd_attr_info)
+    obj_handle_t        handle;         /* handle to the file */
+    unsigned int        attrs;          /* the FILE_ATTRIBUTE_* word */
+@END

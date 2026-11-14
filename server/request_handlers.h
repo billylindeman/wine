@@ -316,6 +316,7 @@ DECL_HANDLER(d3dkmt_mutex_acquire);
 DECL_HANDLER(d3dkmt_mutex_release);
 DECL_HANDLER(alpc_create_port);
 DECL_HANDLER(get_shared_session_block);
+DECL_HANDLER(set_fd_attr_info);
 
 typedef void (*req_handler)( const void *req, void *reply );
 static const req_handler req_handlers[REQ_NB_REQUESTS] =
@@ -629,6 +630,7 @@ static const req_handler req_handlers[REQ_NB_REQUESTS] =
     (req_handler)req_d3dkmt_mutex_release,
     (req_handler)req_alpc_create_port,
     (req_handler)req_get_shared_session_block,
+    (req_handler)req_set_fd_attr_info,
 };
 
 C_ASSERT( sizeof(abstime_t) == 8 );
@@ -2402,3 +2404,6 @@ C_ASSERT( offsetof(struct get_shared_session_block_request, size) == 24 );
 C_ASSERT( sizeof(struct get_shared_session_block_request) == 32 );
 C_ASSERT( offsetof(struct get_shared_session_block_reply, image_size) == 8 );
 C_ASSERT( sizeof(struct get_shared_session_block_reply) == 16 );
+C_ASSERT( offsetof(struct set_fd_attr_info_request, handle) == 12 );
+C_ASSERT( offsetof(struct set_fd_attr_info_request, attrs) == 16 );
+C_ASSERT( sizeof(struct set_fd_attr_info_request) == 24 );

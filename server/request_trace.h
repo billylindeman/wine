@@ -3550,6 +3550,12 @@ static void dump_get_shared_session_block_reply( const struct get_shared_session
     dump_uint64( " image_size=", &req->image_size );
 }
 
+static void dump_set_fd_attr_info_request( const struct set_fd_attr_info_request *req )
+{
+    fprintf( stderr, " handle=%04x", req->handle );
+    fprintf( stderr, ", attrs=%08x", req->attrs );
+}
+
 typedef void (*dump_func)( const void *req );
 
 static const dump_func req_dumpers[REQ_NB_REQUESTS] =
@@ -3863,6 +3869,7 @@ static const dump_func req_dumpers[REQ_NB_REQUESTS] =
     (dump_func)dump_d3dkmt_mutex_release_request,
     (dump_func)dump_alpc_create_port_request,
     (dump_func)dump_get_shared_session_block_request,
+    (dump_func)dump_set_fd_attr_info_request,
 };
 
 static const dump_func reply_dumpers[REQ_NB_REQUESTS] =
@@ -4176,6 +4183,7 @@ static const dump_func reply_dumpers[REQ_NB_REQUESTS] =
     NULL,
     (dump_func)dump_alpc_create_port_reply,
     (dump_func)dump_get_shared_session_block_reply,
+    NULL,
 };
 
 static const char * const req_names[REQ_NB_REQUESTS] =
@@ -4489,6 +4497,7 @@ static const char * const req_names[REQ_NB_REQUESTS] =
     "d3dkmt_mutex_release",
     "alpc_create_port",
     "get_shared_session_block",
+    "set_fd_attr_info",
 };
 
 static const struct

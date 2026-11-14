@@ -5656,23 +5656,40 @@ NTSTATUS WINAPI NtSetInformationFile( HANDLE handle, IO_STATUS_BLOCK *io,
             LARGE_INTEGER mtime, atime;
             char *unix_name;
 
-            if ((status = server_get_unix_fd( handle, 0, &fd, &needs_close, NULL, NULL )))
-                return io->Status = status;
+            if (!(status = server_get_unix_fd( handle, 0, &fd, &needs_close, NULL, NULL )))
+            {
+                if (server_get_unix_name( handle, &unix_name )) unix_name = NULL;
 
-            if (server_get_unix_name( handle, &unix_name )) unix_name = NULL;
+                mtime.QuadPart = info->LastWriteTime.QuadPart == -1 ? 0 : info->LastWriteTime.QuadPart;
+                atime.QuadPart = info->LastAccessTime.QuadPart == -1 ? 0 : info->LastAccessTime.QuadPart;
 
-            mtime.QuadPart = info->LastWriteTime.QuadPart == -1 ? 0 : info->LastWriteTime.QuadPart;
-            atime.QuadPart = info->LastAccessTime.QuadPart == -1 ? 0 : info->LastAccessTime.QuadPart;
+                if (atime.QuadPart || mtime.QuadPart)
+                    status = set_file_times( fd, &mtime, &atime );
 
-            if (atime.QuadPart || mtime.QuadPart)
-                status = set_file_times( fd, &mtime, &atime );
+                if (status == STATUS_SUCCESS)
+                    status = fd_set_file_info( fd, info->FileAttributes,
+                                               unix_name && is_hidden_file( unix_name ));
 
-            if (status == STATUS_SUCCESS)
-                status = fd_set_file_info( fd, info->FileAttributes,
-                                           unix_name && is_hidden_file( unix_name ));
-
-            if (needs_close) close( fd );
-            free( unix_name );
+                if (needs_close) close( fd );
+                free( unix_name );
+            }
+#ifdef __wasm__ /* wineweb: the mount-backed handles — the SET route's own
+                 * BAD_DEVICE_TYPE fallback (the GET route's pattern at
+                 * file.c:5490-5494). The file layer's records carry no unix
+                 * fd; the attribute word rides the wire's set_fd_attr_info
+                 * (the P50 route — the miniserver maps the READONLY bit onto
+                 * the mount's node attribute). */
+            else if (status == STATUS_BAD_DEVICE_TYPE)
+            {
+                SERVER_START_REQ( set_fd_attr_info )
+                {
+                    req->handle = wine_server_obj_handle( handle );
+                    req->attrs  = info->FileAttributes;
+                    status = wine_server_call( req );
+                }
+                SERVER_END_REQ;
+            }
+#endif
         }
         else status = STATUS_INVALID_PARAMETER_3;
         break;

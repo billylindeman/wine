@@ -6271,6 +6271,25 @@ struct get_shared_session_block_reply
 
 };
 
+/* wineweb: the attribute setter (P50 — the SetFileAttributesA route). The
+ * mount-backed handles have no unix fd (the file layer's records), so the
+ * fd_set_file_info route is unreachable; the SET arm falls back here on the
+ * GET route's own BAD_DEVICE_TYPE pattern (file.c:5490-5494). The attrs
+ * word is the FILE_ATTRIBUTE_* value; the server maps the READONLY bit onto
+ * its mount's node attribute (the single bit wine's own
+ * fd_set_file_info carries, file.c:5710's shape). */
+struct set_fd_attr_info_request
+{
+    struct request_header __header;
+    obj_handle_t        handle;
+    unsigned int        attrs;
+    char __pad_20[4];
+};
+struct set_fd_attr_info_reply
+{
+    struct reply_header __header;
+};
+
 
 enum request
 {
@@ -6583,6 +6602,7 @@ enum request
     REQ_d3dkmt_mutex_release,
     REQ_alpc_create_port,
     REQ_get_shared_session_block,
+    REQ_set_fd_attr_info,
     REQ_NB_REQUESTS
 };
 
@@ -6899,6 +6919,7 @@ union generic_request
     struct d3dkmt_mutex_release_request d3dkmt_mutex_release_request;
     struct alpc_create_port_request alpc_create_port_request;
     struct get_shared_session_block_request get_shared_session_block_request;
+    struct set_fd_attr_info_request set_fd_attr_info_request;
 };
 union generic_reply
 {
@@ -7213,8 +7234,9 @@ union generic_reply
     struct d3dkmt_mutex_release_reply d3dkmt_mutex_release_reply;
     struct alpc_create_port_reply alpc_create_port_reply;
     struct get_shared_session_block_reply get_shared_session_block_reply;
+    struct set_fd_attr_info_reply set_fd_attr_info_reply;
 };
 
-#define SERVER_PROTOCOL_VERSION 965
+#define SERVER_PROTOCOL_VERSION 966
 
 #endif /* __WINE_WINE_SERVER_PROTOCOL_H */
