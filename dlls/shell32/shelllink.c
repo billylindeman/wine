@@ -2194,7 +2194,7 @@ static const IShellLinkWVtbl slvtw =
  * loop's Called arm holds while a marker service runs. The structs are \
  * `const` for C's qualifier only — wasm has no read-only pages, and the \
  * patch is this block's own serve. */
-extern unsigned int wineweb_vtbl_mint( unsigned int fn, unsigned int arg_bytes );
+extern unsigned int wineweb_vtbl_mint_at( unsigned int vtbl, unsigned int slot, unsigned int fn, unsigned int arg_bytes );
 
 /* IShellLinkW: QI 12, AddRef 4, Release 4, GetPath 20, GetIDList 8,
  * SetIDList 8, GetDescription 12, SetDescription 8, GetWorkingDirectory 12,
@@ -2216,9 +2216,9 @@ void wineweb_shelllink_vtbl_seed(void)
     unsigned int *pf = (unsigned int *)(void *)&pfvt;
     unsigned int i;
     for (i = 0; i < ARRAY_SIZE(slvtw_args); i++)
-        sl[i] = wineweb_vtbl_mint( sl[i], slvtw_args[i] );
+        wineweb_vtbl_mint_at( (unsigned int)(UINT_PTR)&slvtw, i, sl[i], slvtw_args[i] );
     for (i = 0; i < ARRAY_SIZE(pfvt_args); i++)
-        pf[i] = wineweb_vtbl_mint( pf[i], pfvt_args[i] );
+        wineweb_vtbl_mint_at( (unsigned int)(UINT_PTR)&pfvt, i, pf[i], pfvt_args[i] );
 }
 #endif
 

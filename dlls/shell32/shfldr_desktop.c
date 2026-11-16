@@ -893,7 +893,7 @@ static const IPersistFolder2Vtbl vt_IPersistFolder2 =
  * 0x1926A3 and the drive refused). The boot crossing mints the \
  * guest-callable markers into the class's static vtables — the same \
  * serve as shelllink.c's (the arg bytes from shobjidl_core.idl). */
-extern unsigned int wineweb_vtbl_mint( unsigned int fn, unsigned int arg_bytes );
+extern unsigned int wineweb_vtbl_mint_at( unsigned int vtbl, unsigned int slot, unsigned int fn, unsigned int arg_bytes );
 
 /* IShellFolder2 (vt_MCFldr_ShellFolder2): QI 12, AddRef 4, Release 4,
  * ParseDisplayName 28, EnumObjects 16, BindToObject 20, BindToStorage 20,
@@ -916,9 +916,9 @@ void wineweb_desktopfolder_vtbl_seed(void)
     unsigned int *ipf = (unsigned int *)(void *)&vt_IPersistFolder2;
     unsigned int i;
     for (i = 0; i < ARRAY_SIZE(isf_args); i++)
-        isf[i] = wineweb_vtbl_mint( isf[i], isf_args[i] );
+        wineweb_vtbl_mint_at( (unsigned int)(UINT_PTR)&vt_MCFldr_ShellFolder2, i, isf[i], isf_args[i] );
     for (i = 0; i < ARRAY_SIZE(ipf_args); i++)
-        ipf[i] = wineweb_vtbl_mint( ipf[i], ipf_args[i] );
+        wineweb_vtbl_mint_at( (unsigned int)(UINT_PTR)&vt_IPersistFolder2, i, ipf[i], ipf_args[i] );
 }
 #endif
 

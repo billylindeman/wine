@@ -68,6 +68,28 @@ FARPROC WINAPI get_proc_address( HMODULE module, LPCSTR function )
     FARPROC proc;
     ANSI_STRING str;
 
+#ifdef __wasm__ /* wineweb: the builtin pages' registry route first — the \
+    registry IS their export table (no PE export directory, docs/02 §8.2). \
+    The range guard keeps the real walk for the PE-backed hmods (the main \
+    image's own export directory) — the seam's own fallthrough lands back \
+    here, and without the guard the two call each other forever. The P62 \
+    ShellLink route: combase's apartment_add_dll GetProcAddress-es \
+    DllGetClassObject off the loaded builtin handle (apartment.c:139-141). */
+    {
+        extern unsigned int p2_thunk_window_base(void);
+        extern unsigned int p2_thunk_window_end(void);
+        extern FARPROC wineweb_GetProcAddress( HMODULE module, LPCSTR function );
+        unsigned int tb = p2_thunk_window_base();
+        unsigned int te = p2_thunk_window_end();
+        uintptr_t m = (uintptr_t)module;
+        if (tb && te > tb && m >= tb && m < te)
+        {
+            FARPROC builtin = wineweb_GetProcAddress( module, function );
+            return builtin; /* the builtin page's miss is Windows-faithful NULL */
+        }
+    }
+#endif
+
     if (!module) module = NtCurrentTeb()->Peb->ImageBaseAddress;
 
     if ((ULONG_PTR)function >> 16)

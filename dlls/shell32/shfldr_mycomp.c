@@ -968,7 +968,7 @@ static const IPersistFolder2Vtbl vt_PersistFolder2 =
  * wall's cascade — the tracer named this vtable at 0x49018748 with the raw \
  * funcrefs; the arg bytes from shobjidl_core.idl, the same 20-slot \
  * IShellFolder2 table the other folder seeds carry). */
-extern unsigned int wineweb_vtbl_mint( unsigned int fn, unsigned int arg_bytes );
+extern unsigned int wineweb_vtbl_mint_at( unsigned int vtbl, unsigned int slot, unsigned int fn, unsigned int arg_bytes );
 
 /* IShellFolder2 (vt_ShellFolder2) + IPersistFolder2 (vt_PersistFolder2). */
 static const unsigned int mc_isf_args[] =
@@ -983,8 +983,8 @@ void wineweb_mycomp_vtbl_seed(void)
     unsigned int *ipf = (unsigned int *)(void *)&vt_PersistFolder2;
     unsigned int i;
     for (i = 0; i < ARRAY_SIZE(mc_isf_args); i++)
-        isf[i] = wineweb_vtbl_mint( isf[i], mc_isf_args[i] );
+        wineweb_vtbl_mint_at( (unsigned int)(UINT_PTR)&vt_ShellFolder2, i, isf[i], mc_isf_args[i] );
     for (i = 0; i < ARRAY_SIZE(mc_ipf_args); i++)
-        ipf[i] = wineweb_vtbl_mint( ipf[i], mc_ipf_args[i] );
+        wineweb_vtbl_mint_at( (unsigned int)(UINT_PTR)&vt_PersistFolder2, i, ipf[i], mc_ipf_args[i] );
 }
 #endif
