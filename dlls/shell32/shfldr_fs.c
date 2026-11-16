@@ -1861,3 +1861,24 @@ HRESULT WINAPI MyDocuments_Constructor(IUnknown *outer_unk, REFIID riid, void **
 {
     return create_fs( outer_unk, riid, ppv, &CLSID_MyDocuments, NULL );
 }
+
+#ifdef __wasm__ /* wineweb: the fs folder's vtable seed (the P62 lift wall's \
+ * cascade — the tracer names each interface's raw-funcref lift as the \
+ * desktop flow reaches it; the arg bytes from shobjidl_core.idl, the same \
+ * IShellFolder2 table the desktop folder's seed carries). */
+extern unsigned int wineweb_vtbl_mint( unsigned int fn, unsigned int arg_bytes );
+
+/* IShellFolder2 (sfvt): the same 20-slot table (see shfldr_desktop.c). */
+static const unsigned int fs_isf_args[] =
+{
+    12, 4, 4, 28, 16, 20, 20, 16, 16, 16, 28, 16, 24, 8, 8, 16, 12, 16, 16, 12
+};
+
+void wineweb_fsfolder_vtbl_seed(void)
+{
+    unsigned int *isf = (unsigned int *)(void *)&sfvt;
+    unsigned int i;
+    for (i = 0; i < ARRAY_SIZE(fs_isf_args); i++)
+        isf[i] = wineweb_vtbl_mint( isf[i], fs_isf_args[i] );
+}
+#endif

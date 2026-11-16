@@ -1143,6 +1143,22 @@ HRESULT WINAPI SHLoadNonloadedIconOverlayIdentifiers( VOID )
  */
 HINSTANCE    shell32_hInstance = 0;
 
+#ifdef __wasm__ /* wineweb: the vtable seed's coordinator (the P62 boot crossing) — \
+    each file's seed owns its own static vtables (the file-local `static \
+    const` structs are only visible there); this is the ONE export the \
+    boot's ordinal-38 slot crosses. */
+void wineweb_shell32_vtbl_seed(void)
+{
+    extern void wineweb_shelllink_vtbl_seed(void);
+    extern void wineweb_desktopfolder_vtbl_seed(void);
+    extern void wineweb_fsfolder_vtbl_seed(void);
+    extern void wineweb_mycomp_vtbl_seed(void);
+    wineweb_shelllink_vtbl_seed();
+    wineweb_desktopfolder_vtbl_seed();
+    wineweb_fsfolder_vtbl_seed();
+    wineweb_mycomp_vtbl_seed();
+}
+#endif
 
 /*************************************************************************
  * SHELL32 DllMain

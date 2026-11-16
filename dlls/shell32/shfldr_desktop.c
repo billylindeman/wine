@@ -887,6 +887,41 @@ static const IPersistFolder2Vtbl vt_IPersistFolder2 =
     ISF_Desktop_IPersistFolder2_fnGetCurFolder
 };
 
+#ifdef __wasm__ /* wineweb: the desktop folder's vtable seed (the P62 lift \
+ * wall's own named red — the tracer: _IShellFolder_CreateViewObject's \
+ * `mov eax,[eax+0x20]; call eax` lifted the raw shell32 funcref at \
+ * 0x1926A3 and the drive refused). The boot crossing mints the \
+ * guest-callable markers into the class's static vtables — the same \
+ * serve as shelllink.c's (the arg bytes from shobjidl_core.idl). */
+extern unsigned int wineweb_vtbl_mint( unsigned int fn, unsigned int arg_bytes );
+
+/* IShellFolder2 (vt_MCFldr_ShellFolder2): QI 12, AddRef 4, Release 4,
+ * ParseDisplayName 28, EnumObjects 16, BindToObject 20, BindToStorage 20,
+ * CompareIDs 16, CreateViewObject 16, GetAttributesOf 16, GetUIObjectOf 28,
+ * GetDisplayNameOf 16, SetNameOf 24, GetDefaultSearchGUID 8, EnumSearches 8,
+ * GetDefaultColumn 16, GetDefaultColumnState 12, GetDetailsEx 16,
+ * GetDetailsOf 16, MapColumnToSCID 12. */
+static const unsigned int isf_args[] =
+{
+    12, 4, 4, 28, 16, 20, 20, 16, 16, 16, 28, 16, 24, 8, 8, 16, 12, 16, 16, 12
+};
+
+/* IPersistFolder2 (vt_IPersistFolder2): QI 12, AddRef 4, Release 4,
+ * GetClassID 8, Initialize 8, GetCurFolder 8. */
+static const unsigned int ipf_args[] = { 12, 4, 4, 8, 8, 8 };
+
+void wineweb_desktopfolder_vtbl_seed(void)
+{
+    unsigned int *isf = (unsigned int *)(void *)&vt_MCFldr_ShellFolder2;
+    unsigned int *ipf = (unsigned int *)(void *)&vt_IPersistFolder2;
+    unsigned int i;
+    for (i = 0; i < ARRAY_SIZE(isf_args); i++)
+        isf[i] = wineweb_vtbl_mint( isf[i], isf_args[i] );
+    for (i = 0; i < ARRAY_SIZE(ipf_args); i++)
+        ipf[i] = wineweb_vtbl_mint( ipf[i], ipf_args[i] );
+}
+#endif
+
 void release_desktop_folder(void)
 {
     if (!cached_sf) return;

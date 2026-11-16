@@ -502,6 +502,13 @@ static LRESULT dispatch_win_proc_params( struct win_proc_params *params, size_t 
         {
             if (proc == (UINT_PTR)WINPROC_PROC16)
                 WARN( "wineweb: 16-bit A proc dispatch reached (loud)\n" );
+            else if (proc >= 0x70000000u) /* wineweb: a forwarded prior proc rides back to its funcref (the P62 lift wall) */
+            {
+                extern unsigned int wineweb_proc_reverse( unsigned int marker );
+                UINT_PTR fn = wineweb_proc_reverse( (unsigned)proc );
+                if (fn) result = ((WNDPROC)fn)( params->hwnd, params->msg, params->wparam, params->lparam );
+                else WARN( "wineweb: dispatch of unforwarded marker %08x (loud)\n", (unsigned)proc );
+            }
             else if (proc >= 0x400000u && proc < 0x20000000u)
                 result = wineweb_guest_call( (unsigned)proc, (unsigned)(UINT_PTR)params->hwnd,
                                              params->msg, params->wparam, params->lparam );
@@ -518,7 +525,14 @@ static LRESULT dispatch_win_proc_params( struct win_proc_params *params, size_t 
          * corridor end) or a builtin's wasm function pointer — those are
          * small table indices in this toolchain (the W8 run-13 evidence: a
          * builtin proc fed to wineweb_guest_call lifted garbage). */
-        if (proc >= 0x400000u && proc < 0x20000000u)
+        if (proc >= 0x70000000u) /* wineweb: a forwarded prior proc rides back to its funcref (the P62 lift wall) */
+        {
+            extern unsigned int wineweb_proc_reverse( unsigned int marker );
+            UINT_PTR fn = wineweb_proc_reverse( (unsigned)proc );
+            if (fn) result = ((WNDPROC)fn)( params->hwnd, params->msg, params->wparam, params->lparam );
+            else WARN( "wineweb: dispatch of unforwarded marker %08x (loud)\n", (unsigned)proc );
+        }
+        else if (proc >= 0x400000u && proc < 0x20000000u)
             result = wineweb_guest_call( (unsigned)proc, (unsigned)(UINT_PTR)params->hwnd,
                                          params->msg, params->wparam, params->lparam );
         else

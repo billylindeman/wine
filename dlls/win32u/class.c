@@ -953,7 +953,14 @@ static ULONG_PTR set_class_long_size( HWND hwnd, INT offset, LONG_PTR newval, UI
     case GCLP_WNDPROC:
         newval = (ULONG_PTR)alloc_winproc( (WNDPROC)newval, ansi );
         if (!server_set_class_info( hwnd, offset, newval, size, &retval, ansi )) break;
+#ifdef __wasm__ /* wineweb: the guest boundary's proc crossing (the P62 lift wall) — the builtin's proc is a funcref in this toolchain; the guest holds the minted marker (window.c's get_window_proc shape) */
+        {
+            extern unsigned int wineweb_proc_forward( unsigned int fn );
+            retval = (ULONG_PTR)wineweb_proc_forward( (unsigned)get_winproc( (WNDPROC)retval, ansi ) );
+        }
+#else
         retval = (ULONG_PTR)get_winproc( (WNDPROC)retval, ansi );
+#endif
         break;
     case GCL_CBCLSEXTRA:  /* cannot change this one */
         RtlSetLastWin32Error( ERROR_INVALID_PARAMETER );
@@ -1051,7 +1058,15 @@ static ULONG_PTR get_class_long_size( HWND hwnd, INT offset, UINT size, BOOL ans
         return 0;
     }
 
+#ifdef __wasm__ /* wineweb: the guest boundary's proc crossing (the P62 lift wall) — the minted marker, the get_window_proc shape */
+    if (offset == GCLP_WNDPROC)
+    {
+        extern unsigned int wineweb_proc_forward( unsigned int fn );
+        return (ULONG_PTR)wineweb_proc_forward( (unsigned)get_winproc( (WNDPROC)ret, ansi ) );
+    }
+#else
     if (offset == GCLP_WNDPROC) return (ULONG_PTR)get_winproc( (WNDPROC)ret, ansi );
+#endif
     if (offset == GCLP_HICONSM && !ret && (class = get_class_ptr( hwnd, FALSE )))
     {
         ret = (UINT_PTR)class->icon_internal;

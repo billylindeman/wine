@@ -1199,12 +1199,26 @@ BOOL WINAPI RemoveWindowSubclass(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PTR u
    if (!stack->SubclassProcs && !stack->running) {
       TRACE("Last Subclass removed, cleaning up\n");
       /* clean up our heap and reset the original window procedure */
+#ifdef __wasm__ /* wineweb: the current proc reads back as the forwarded marker (the P62 lift wall) — reverse before comparing (the minted marker is the proc's guest identity) */
+      {
+         extern unsigned int wineweb_proc_reverse( unsigned int marker );
+         UINT_PTR curproc = (UINT_PTR)GetWindowLongPtrW (hWnd, GWLP_WNDPROC);
+         if (curproc >= 0x70000000u) curproc = wineweb_proc_reverse( (unsigned)curproc );
+         if ((WNDPROC)curproc != COMCTL32_SubclassProc)
+            WARN("Window procedure has been modified, skipping restore\n");
+         else if (stack->is_unicode)
+            SetWindowLongPtrW (hWnd, GWLP_WNDPROC, (DWORD_PTR)stack->origproc);
+         else
+            SetWindowLongPtrA (hWnd, GWLP_WNDPROC, (DWORD_PTR)stack->origproc);
+      }
+#else
       if ((WNDPROC)GetWindowLongPtrW (hWnd, GWLP_WNDPROC) != COMCTL32_SubclassProc)
          WARN("Window procedure has been modified, skipping restore\n");
       else if (stack->is_unicode)
          SetWindowLongPtrW (hWnd, GWLP_WNDPROC, (DWORD_PTR)stack->origproc);
       else
          SetWindowLongPtrA (hWnd, GWLP_WNDPROC, (DWORD_PTR)stack->origproc);
+#endif
       Free (stack);
       RemovePropW( hWnd, COMCTL32_wSubclass );
    }

@@ -963,3 +963,28 @@ static const IPersistFolder2Vtbl vt_PersistFolder2 =
     IMCFldr_PersistFolder2_Initialize,
     IMCFldr_PersistFolder2_GetCurFolder
 };
+
+#ifdef __wasm__ /* wineweb: the MyComputer folder's vtable seed (the P62 lift \
+ * wall's cascade — the tracer named this vtable at 0x49018748 with the raw \
+ * funcrefs; the arg bytes from shobjidl_core.idl, the same 20-slot \
+ * IShellFolder2 table the other folder seeds carry). */
+extern unsigned int wineweb_vtbl_mint( unsigned int fn, unsigned int arg_bytes );
+
+/* IShellFolder2 (vt_ShellFolder2) + IPersistFolder2 (vt_PersistFolder2). */
+static const unsigned int mc_isf_args[] =
+{
+    12, 4, 4, 28, 16, 20, 20, 16, 16, 16, 28, 16, 24, 8, 8, 16, 12, 16, 16, 12
+};
+static const unsigned int mc_ipf_args[] = { 12, 4, 4, 8, 8, 8 };
+
+void wineweb_mycomp_vtbl_seed(void)
+{
+    unsigned int *isf = (unsigned int *)(void *)&vt_ShellFolder2;
+    unsigned int *ipf = (unsigned int *)(void *)&vt_PersistFolder2;
+    unsigned int i;
+    for (i = 0; i < ARRAY_SIZE(mc_isf_args); i++)
+        isf[i] = wineweb_vtbl_mint( isf[i], mc_isf_args[i] );
+    for (i = 0; i < ARRAY_SIZE(mc_ipf_args); i++)
+        ipf[i] = wineweb_vtbl_mint( ipf[i], mc_ipf_args[i] );
+}
+#endif

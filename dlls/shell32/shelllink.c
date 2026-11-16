@@ -2182,6 +2182,46 @@ static const IShellLinkWVtbl slvtw =
     IShellLinkW_fnSetPath
 };
 
+#ifdef __wasm__ /* wineweb: the host-object vtable seed (the P62 ShellLink \
+ * disposition). The ShellLink object's vtable entries are this module's \
+ * own funcref indices — never guest-callable (the drive lifts them as x86 \
+ * and refuses: the P61 UntranslatableRip class). The boot crossing mints a \
+ * marker per slot (the drive's host-call route, the same one a direct \
+ * builtin call rides) with the method's own stdcall arg bytes from wine's \
+ * IDL (shobjidl.idl IShellLinkW / objidl.idl IPersistFile) and writes it \
+ * into the static vtable — every instance's lpVtbl rides the same struct. \
+ * Boot-only: the mint borrows the engine's host_calls map, which the drive \
+ * loop's Called arm holds while a marker service runs. The structs are \
+ * `const` for C's qualifier only — wasm has no read-only pages, and the \
+ * patch is this block's own serve. */
+extern unsigned int wineweb_vtbl_mint( unsigned int fn, unsigned int arg_bytes );
+
+/* IShellLinkW: QI 12, AddRef 4, Release 4, GetPath 20, GetIDList 8,
+ * SetIDList 8, GetDescription 12, SetDescription 8, GetWorkingDirectory 12,
+ * SetWorkingDirectory 8, GetArguments 12, SetArguments 8, GetHotkey 8,
+ * SetHotkey 8, GetShowCmd 8, SetShowCmd 8, GetIconLocation 16,
+ * SetIconLocation 12, SetRelativePath 12, Resolve 12, SetPath 8. */
+static const unsigned int slvtw_args[] =
+{
+    12, 4, 4, 20, 8, 8, 12, 8, 12, 8, 12, 8, 8, 8, 8, 8, 16, 12, 12, 12, 8
+};
+
+/* IPersistFile: QI 12, AddRef 4, Release 4, GetClassID 8, IsDirty 4,
+ * Load 12, Save 12, SaveCompleted 12, GetCurFile 8. */
+static const unsigned int pfvt_args[] = { 12, 4, 4, 8, 4, 12, 12, 12, 8 };
+
+void wineweb_shelllink_vtbl_seed(void)
+{
+    unsigned int *sl = (unsigned int *)(void *)&slvtw;
+    unsigned int *pf = (unsigned int *)(void *)&pfvt;
+    unsigned int i;
+    for (i = 0; i < ARRAY_SIZE(slvtw_args); i++)
+        sl[i] = wineweb_vtbl_mint( sl[i], slvtw_args[i] );
+    for (i = 0; i < ARRAY_SIZE(pfvt_args); i++)
+        pf[i] = wineweb_vtbl_mint( pf[i], pfvt_args[i] );
+}
+#endif
+
 static HRESULT WINAPI
 ShellLink_DataList_QueryInterface( IShellLinkDataList* iface, REFIID riid, void** ppvObject)
 {

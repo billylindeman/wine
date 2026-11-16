@@ -1260,7 +1260,17 @@ static WNDPROC get_window_proc( WNDPROC wndproc, BOOL wndproc_ansi, BOOL ansi )
      * that the hack is in GetWindowLongPtr[AW], not in winprocs.
      */
     if (wndproc == MAKE_WNDPROC(NTUSER_WNDPROC_EDIT) && wndproc_ansi != ansi) return wndproc;
+#ifdef __wasm__ /* wineweb: the guest boundary's proc crossing (the P62 lift wall) — \
+    the builtin class's proc is a funcref index in this toolchain, never a guest \
+    VA; the value the guest holds is the minted marker (the drive's host-call \
+    route). The raw funcref stays for the internal callers' own table calls. */
+    {
+        extern unsigned int wineweb_proc_forward( unsigned int fn );
+        return (WNDPROC)(UINT_PTR)wineweb_proc_forward( (unsigned)(UINT_PTR)get_winproc( wndproc, ansi ) );
+    }
+#else
     return get_winproc( wndproc, ansi );
+#endif
 }
 
 static LONG_PTR get_window_long_shm( HWND hwnd, UINT offset, UINT size, BOOL ansi, BOOL internal )

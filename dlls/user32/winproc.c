@@ -1141,3 +1141,28 @@ void winproc_init(void)
     fixup_forwards();
 #endif
 }
+
+#ifdef __wasm__ /* wineweb: the builtin-proc forwarder's seed (the P62 lift wall) — \
+    a STANDALONE boot entry (never in winproc_init: the module ctor's \
+    process_attach calls winproc_init before the boot installs the \
+    engine, and the mint needs it — the host_calls map the drive's \
+    host-call route reads). The builtin classes' own procs are funcref \
+    indices in this toolchain (the W8 run-13 discrimination), never \
+    guest-callable; the guest-visible value is the minted marker. The \
+    mint is boot-only (a mid-drive mint would double-borrow the drive \
+    loop's host_calls Ref). A wndproc is 4-arg stdcall = 16 arg bytes. \
+    The A and W tables hold the same procs for the both-namespace pairs; \
+    the mint dedupes per funcref. */
+void wineweb_proc_seed(void)
+{
+    extern unsigned int wineweb_proc_forward( unsigned int fn );
+    const ntuser_client_func_ptr *ptr_A, *ptr_W, *ptr_workers;
+
+    RtlRetrieveNtUserPfn( (const void **)&ptr_A, (const void **)&ptr_W, (const void **)&ptr_workers );
+    for (unsigned int i = 0; i < NTUSER_NB_PROCS; i++)
+    {
+        wineweb_proc_forward( (unsigned)(UINT_PTR)ptr_A[i][0] );
+        wineweb_proc_forward( (unsigned)(UINT_PTR)ptr_W[i][0] );
+    }
+}
+#endif
