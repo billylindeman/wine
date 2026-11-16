@@ -538,7 +538,9 @@ BOOL GDI_dec_ref_count( HGDIOBJ handle )
          * reads a sane funcs pointer. */
         if (!entry_obj( entry )->selcount)
         {
+            extern void wineweb_pool_diag_cursor(void);
             unsigned char *raw = (unsigned char *)entry_obj( entry );
+            wineweb_pool_diag_cursor();
             FIXME( "P63 tracer: dec underflow handle %p idx %u obj %p "
                    "entry{Object %p Owner %08x Unique %04x Type %u Flags %u} "
                    "raw %02x%02x%02x%02x%02x%02x%02x%02x-%02x%02x%02x%02x%02x%02x%02x%02x\n",
