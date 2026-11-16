@@ -527,6 +527,16 @@ BOOL GDI_dec_ref_count( HGDIOBJ handle )
     pthread_mutex_lock( &gdi_lock );
     if ((entry = handle_entry( handle )))
     {
+        /* P63 tracer (bounded, one run, stripped after the read): the
+         * selcount underflow's attribution — the handle's entry is LIVE
+         * (handle_entry validated Type + Unique), so this is either an
+         * unpaired dec or the object header's own storage corrupted (the
+         * ~12-byte obj headers ride the host pool's small-slab cells —
+         * header-less, no magic). The type + the funcs pointer name it. */
+        if (!entry_obj( entry )->selcount)
+            FIXME( "P63 tracer: dec underflow handle %p type %u obj %p funcs %p\n",
+                   handle, entry->Type, entry_obj( entry ),
+                   entry_obj( entry )->funcs );
         assert( entry_obj( entry )->selcount );
         if (!--entry_obj( entry )->selcount && entry_obj( entry )->deleted)
         {
