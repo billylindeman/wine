@@ -532,11 +532,22 @@ BOOL GDI_dec_ref_count( HGDIOBJ handle )
          * (handle_entry validated Type + Unique), so this is either an
          * unpaired dec or the object header's own storage corrupted (the
          * ~12-byte obj headers ride the host pool's small-slab cells —
-         * header-less, no magic). The type + the funcs pointer name it. */
+         * header-less, no magic). The entry's fields + the raw header
+         * bytes name it: a freed-cell push reads raw {head,0,s.old...},
+         * an external zero-fill reads all-zero, a live-but-unpaired dec
+         * reads a sane funcs pointer. */
         if (!entry_obj( entry )->selcount)
-            FIXME( "P63 tracer: dec underflow handle %p type %u obj %p funcs %p\n",
-                   handle, entry->Type, entry_obj( entry ),
-                   entry_obj( entry )->funcs );
+        {
+            unsigned char *raw = (unsigned char *)entry_obj( entry );
+            FIXME( "P63 tracer: dec underflow handle %p idx %u obj %p "
+                   "entry{Object %p Owner %08x Unique %04x Type %u Flags %u} "
+                   "raw %02x%02x%02x%02x%02x%02x%02x%02x-%02x%02x%02x%02x%02x%02x%02x%02x\n",
+                   handle, LOWORD( handle ), entry_obj( entry ),
+                   (void *)(UINT_PTR)entry->Object, entry->Owner.Value,
+                   entry->Unique, entry->Type, entry->Flags,
+                   raw[0], raw[1], raw[2], raw[3], raw[4], raw[5], raw[6], raw[7],
+                   raw[8], raw[9], raw[10], raw[11], raw[12], raw[13], raw[14], raw[15] );
+        }
         assert( entry_obj( entry )->selcount );
         if (!--entry_obj( entry )->selcount && entry_obj( entry )->deleted)
         {
