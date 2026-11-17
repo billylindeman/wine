@@ -126,6 +126,15 @@ static HRESULT apartment_add_dll(const WCHAR *library_name, struct opendll **ret
     *ret = apartment_get_dll(library_name);
     if (*ret) return S_OK;
 
+#ifdef __wasm__ /* wineweb: the loaded builtin resolves by name through the \
+    flags-0 route (the p44's own LoadLibraryW shape — desktop.c:1295); the \
+    altered-search route refuses the bare name before load_dll (the P62 \
+    probe: apartment_add_dll's couldn't-load ERR, no loader WARN). The P64 \
+    re-open: the door's deeper walls are served (the P63 pacing + pool + \
+    focus set), the launchers' route rides it. */
+    hLibrary = LoadLibraryW( library_name );
+    if (!hLibrary)
+#endif
     hLibrary = LoadLibraryExW(library_name, 0, LOAD_WITH_ALTERED_SEARCH_PATH);
     if (!hLibrary)
     {
