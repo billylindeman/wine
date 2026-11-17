@@ -144,8 +144,20 @@ static HRESULT apartment_add_dll(const WCHAR *library_name, struct opendll **ret
     }
 
     /* DllCanUnloadNow is optional */
+#ifdef __wasm__ /* wineweb: the resolves ride the funcref seam (the P64 \
+    serve): the C's fn-pointer field holds the shared table's funcref \
+    index — the wasm call_indirect on it serves the builtin's own \
+    function. The slot VA (wineweb_GetProcAddress's answer) is the \
+    GUEST call's thunk transport, an OOB table index for the wasm \
+    side (the p44's note); getproc.rs's wineweb_GetProcAddressFuncref \
+    answers the funcref for the same (dll, export) pair. */
+    extern unsigned int wineweb_GetProcAddressFuncref( unsigned int hmod, const char *name );
+    DllCanUnloadNow = (void *)(UINT_PTR)wineweb_GetProcAddressFuncref( hLibrary, "DllCanUnloadNow" );
+    DllGetClassObject = (void *)(UINT_PTR)wineweb_GetProcAddressFuncref( hLibrary, "DllGetClassObject" );
+#else
     DllCanUnloadNow = (void *)GetProcAddress(hLibrary, "DllCanUnloadNow");
     DllGetClassObject = (void *)GetProcAddress(hLibrary, "DllGetClassObject");
+#endif
     if (!DllGetClassObject)
     {
         /* failure: the dll did not export DllGetClassObject */
@@ -777,7 +789,24 @@ static HRESULT apartment_getclassobject(struct apartment *apt, LPCWSTR dllpath,
     {
         HRESULT (WINAPI *p_ole32_DllGetClassObject)(REFCLSID clsid, REFIID riid, void **obj);
 
+#ifdef __wasm__ /* wineweb: the ole32 special case's resolve rides the \
+    funcref seam (the P64 serve — the same shape apartment_add_dll's \
+    DllGetClassObject rides): the slot VA is the guest call's thunk \
+    transport, the wasm call_indirect needs the shared table's funcref \
+    (getproc.rs's wineweb_GetProcAddressFuncref — the p44's "a guest \
+    thunk VA is not a host fn pointer" note). The PE-backed modules' \
+    miss answers 0 — the caller's own route owns them. */
+        extern unsigned int wineweb_GetProcAddressFuncref( unsigned int hmod, const char *name );
+        p_ole32_DllGetClassObject =
+            (void *)(UINT_PTR)wineweb_GetProcAddressFuncref( GetModuleHandleW(L"ole32.dll"), "DllGetClassObject" );
+        if (!p_ole32_DllGetClassObject)
+        {
+            ERR("DllGetClassObject not found in ole32.dll\n");
+            return CO_E_DLLNOTFOUND;
+        }
+#else
         p_ole32_DllGetClassObject = (void *)GetProcAddress(GetModuleHandleW(L"ole32.dll"), "DllGetClassObject");
+#endif
 
         /* we don't need to control the lifetime of this dll, so use the local
          * implementation of DllGetClassObject directly */
