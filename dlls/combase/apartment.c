@@ -152,8 +152,8 @@ static HRESULT apartment_add_dll(const WCHAR *library_name, struct opendll **ret
     side (the p44's note); getproc.rs's wineweb_GetProcAddressFuncref \
     answers the funcref for the same (dll, export) pair. */
     extern unsigned int wineweb_GetProcAddressFuncref( unsigned int hmod, const char *name );
-    DllCanUnloadNow = (void *)(UINT_PTR)wineweb_GetProcAddressFuncref( hLibrary, "DllCanUnloadNow" );
-    DllGetClassObject = (void *)(UINT_PTR)wineweb_GetProcAddressFuncref( hLibrary, "DllGetClassObject" );
+    DllCanUnloadNow = (void *)(UINT_PTR)wineweb_GetProcAddressFuncref( (unsigned int)(UINT_PTR)hLibrary, "DllCanUnloadNow" );
+    DllGetClassObject = (void *)(UINT_PTR)wineweb_GetProcAddressFuncref( (unsigned int)(UINT_PTR)hLibrary, "DllGetClassObject" );
 #else
     DllCanUnloadNow = (void *)GetProcAddress(hLibrary, "DllCanUnloadNow");
     DllGetClassObject = (void *)GetProcAddress(hLibrary, "DllGetClassObject");
@@ -798,7 +798,7 @@ static HRESULT apartment_getclassobject(struct apartment *apt, LPCWSTR dllpath,
     miss answers 0 — the caller's own route owns them. */
         extern unsigned int wineweb_GetProcAddressFuncref( unsigned int hmod, const char *name );
         p_ole32_DllGetClassObject =
-            (void *)(UINT_PTR)wineweb_GetProcAddressFuncref( GetModuleHandleW(L"ole32.dll"), "DllGetClassObject" );
+            (void *)(UINT_PTR)wineweb_GetProcAddressFuncref( (unsigned int)(UINT_PTR)GetModuleHandleW(L"ole32.dll"), "DllGetClassObject" );
         if (!p_ole32_DllGetClassObject)
         {
             ERR("DllGetClassObject not found in ole32.dll\n");
