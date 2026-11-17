@@ -159,11 +159,6 @@ static BOOL wweb_surface_flush( struct window_surface *surface, const RECT *rect
     uint8_t *dst;
     uint32_t len;
 
-#ifdef __wasm__ /* wineweb: WWFL probe */
-    ERR( "WWFL: flush surf %dx%d dirty %s bounds %s\n", surface_w,
-         surface->rect.bottom - surface->rect.top, wine_dbgstr_rect( dirty ), wine_dbgstr_rect( &surface->bounds ) );
-#endif
-
     /* The drv handle resolves here, not at surface creation: the create walk
      * builds the window surface BEFORE WM_NCCREATE/WM_CREATE/pCreateWindow
      * (window.c's initial apply_window_pos), so the drv window does not exist
