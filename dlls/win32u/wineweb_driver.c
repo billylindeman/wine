@@ -445,10 +445,26 @@ static void wweb_WindowPosChanged( HWND hwnd, HWND insert_after, HWND owner, UIN
     BOOL visible = (NtUserGetWindowLongW( hwnd, GWL_STYLE ) & WS_VISIBLE) != 0;
 
     if (surface && surface != &dummy_surface) wweb_surface_note( hwnd, surface );
-    /* The desktop never gets a host object: its rects are staged by
-     * wweb_SetDesktopWindow and its "pixels" are the compositor screen
-     * itself (the drv model's backdrop), not a window. */
-    if (is_desktop_window( hwnd )) return;
+    /* The desktop gets a host object too (the P66 serve). The old model
+     * ("its pixels are the compositor screen itself, the backdrop") left it
+     * unmapped, and wweb_surface_flush's wweb_map then dropped EVERY desktop
+     * flush — the launchers' ink drew into the DIB (the P66 red-inventory
+     * probe: "flush surf 896x640 dirty (0,0)-(896,640)" after the T3 paint
+     * synth for the desktop) and never reached the compositor; the frame's
+     * desktop region stayed backdrop black (desktopInk=0). The rects are
+     * staged by wweb_SetDesktopWindow (0,0,screen) before this walk; the
+     * desktop is created before the taskband, so it sits at the BOTTOM of
+     * the host z-order — the band blits over it. The HWND_MESSAGE parent
+     * rides the same is_desktop_window gate: created 0-size then walked
+     * hidden (no WS_VISIBLE), the compositor skips it. */
+    if (is_desktop_window( hwnd ))
+    {
+        if (!wweb_map( hwnd, &drv ) && get_window_rects( hwnd, COORDS_SCREEN, &cur, get_thread_dpi() )
+            && cur.window.right != cur.window.left && cur.window.bottom != cur.window.top)
+            wweb_create_drv_window( hwnd );
+        if (wweb_map( hwnd, &drv )) wineweb_drv_show_window( drv, visible ? 1 : 0 );
+        return;
+    }
     /* The lazy create (x11's create_win_data-on-first-walk shape): a 0-size
      * create (the menu popup) skipped the host object; the first walk with a
      * real rect materializes it — the surface flush resolves the handle then
