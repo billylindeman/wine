@@ -84,6 +84,7 @@ static void dump_new_process_reply( const struct new_process_reply *req )
     fprintf( stderr, " info=%04x", req->info );
     fprintf( stderr, ", pid=%04x", req->pid );
     fprintf( stderr, ", handle=%04x", req->handle );
+    fprintf( stderr, ", slot=%08x", req->slot );
 }
 
 static void dump_get_new_process_info_request( const struct get_new_process_info_request *req )

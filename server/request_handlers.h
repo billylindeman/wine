@@ -702,6 +702,7 @@ C_ASSERT( sizeof(struct new_process_request) == 56 );
 C_ASSERT( offsetof(struct new_process_reply, info) == 8 );
 C_ASSERT( offsetof(struct new_process_reply, pid) == 12 );
 C_ASSERT( offsetof(struct new_process_reply, handle) == 16 );
+C_ASSERT( offsetof(struct new_process_reply, slot) == 20 );
 C_ASSERT( sizeof(struct new_process_reply) == 24 );
 C_ASSERT( offsetof(struct get_new_process_info_request, info) == 12 );
 C_ASSERT( sizeof(struct get_new_process_info_request) == 16 );

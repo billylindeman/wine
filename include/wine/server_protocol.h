@@ -1140,9 +1140,7 @@ struct new_process_reply
     obj_handle_t info;
     process_id_t pid;
     obj_handle_t handle;
-    unsigned int slot;   /* wineweb: the designated corridor slot (the wasm
-                            route — the pad's word named; the wire bytes
-                            unchanged) */
+    unsigned int slot;
 };
 
 
@@ -7239,6 +7237,6 @@ union generic_reply
     struct set_fd_attr_info_reply set_fd_attr_info_reply;
 };
 
-#define SERVER_PROTOCOL_VERSION 966
+#define SERVER_PROTOCOL_VERSION 967
 
 #endif /* __WINE_WINE_SERVER_PROTOCOL_H */
