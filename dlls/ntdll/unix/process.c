@@ -275,6 +275,18 @@ static unsigned int get_pe_file_info( OBJECT_ATTRIBUTES *attr, UNICODE_STRING *n
     }
     if (status) goto done;
 
+#ifdef __wasm__
+    /* wineweb: the wasm route stops after the open — the file objects
+     * carry no unix fd (the BAD_DEVICE_TYPE named disposition) and the
+     * section machinery below is the unix shape (the socket leg's own
+     * class: no unix fds on this runtime). The open IS the info — the
+     * pe_info rides zeroed (the wasm arm of NtCreateUserProcess never
+     * reads it; the machine rides the new_process reply's own probe),
+     * and the exec's staging flows from the drive-side handler's own
+     * read of the guest's file surface. */
+    goto done;
+#endif
+
     if (!(status = NtCreateSection( &mapping, STANDARD_RIGHTS_REQUIRED | SECTION_QUERY |
                                     SECTION_MAP_READ | SECTION_MAP_EXECUTE,
                                     NULL, NULL, PAGE_EXECUTE_READ, SEC_IMAGE, *handle )))

@@ -270,10 +270,18 @@ static NTSTATUS create_nt_process( HANDLE token, HANDLE debug, SECURITY_ATTRIBUT
     NTSTATUS status;
     UINT pos = 0;
 
-    if (!params->ImagePathName.Buffer[0]) return STATUS_OBJECT_PATH_NOT_FOUND;
+    if (!params->ImagePathName.Buffer[0])
+    {
+        /* wineweb: the silent-death wall's name (the P69 diag — the
+         * launcher click must never be silent again). */
+        WARN( "wineweb: create_nt_process refuses an empty ImagePathName\n" );
+        return STATUS_OBJECT_PATH_NOT_FOUND;
+    }
     status = RtlDosPathNameToNtPathName_U_WithStatus( params->ImagePathName.Buffer, &nameW, NULL, NULL );
     if (!status)
     {
+        WARN( "wineweb: create_nt_process: the image name did not map: %s status %08x\n",
+              debugstr_w( params->ImagePathName.Buffer ), status );
         RtlNormalizeProcessParams( params );
 
         attr->Attributes[pos].Attribute    = PS_ATTRIBUTE_IMAGE_NAME;
