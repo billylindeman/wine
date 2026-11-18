@@ -1149,6 +1149,10 @@ typedef volatile struct
     obj_handle_t info;           /* new process info handle */
     process_id_t pid;            /* process id */
     obj_handle_t handle;         /* process handle (in the current process) */
+    unsigned int slot;           /* wineweb: the designated corridor slot (the
+                                    wasm route — the pad's word named; the
+                                    wire bytes unchanged, the unix route's
+                                    socket_fd role) */
 @END
 
 

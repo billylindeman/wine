@@ -396,9 +396,23 @@ static BOOL is_unix_console_handle( HANDLE handle )
 }
 
 
+#ifdef __wasm__
+/* wineweb: the wasm route's child-slot stash (the new_process reply's
+ * designated corridor slot — the wasm arm captures it and the spawn arm
+ * hands it to the drive-side handler). */
+static unsigned int wasm_child_slot;
+
+/* wineweb: the P69 drive-side handler (crates/wineweb-vfs/src/
+ * proc_spawn.rs — the env import resolved to the runtime artifact's
+ * export by the boot wiring). */
+extern NTSTATUS wineweb_spawn_process( const RTL_USER_PROCESS_PARAMETERS *params, unsigned int slot );
+#endif
+
+
 /***********************************************************************
  *           spawn_process
  */
+#ifndef __wasm__
 static NTSTATUS spawn_process( const RTL_USER_PROCESS_PARAMETERS *params, int socketfd,
                                int unixdir, char *winedebug, const struct pe_image_info *pe_info )
 {
@@ -462,6 +476,7 @@ static NTSTATUS spawn_process( const RTL_USER_PROCESS_PARAMETERS *params, int so
     if (stdout_fd != -1 && stdout_fd != 1) close( stdout_fd );
     return status;
 }
+#endif /* __wasm__ */
 
 
 /***********************************************************************
@@ -797,7 +812,7 @@ NTSTATUS WINAPI NtCreateUserProcess( HANDLE *process_handle_ptr, HANDLE *thread_
     }
 
     /* create the socket for the new process */
-
+#ifndef __wasm__
     if (socketpair( PF_UNIX, SOCK_STREAM, 0, socketfd ) == -1)
     {
         status = STATUS_TOO_MANY_OPENED_FILES;
@@ -815,6 +830,11 @@ NTSTATUS WINAPI NtCreateUserProcess( HANDLE *process_handle_ptr, HANDLE *thread_
 #endif
 
     wine_server_send_fd( socketfd[1] );
+#endif /* __wasm__ */
+    /* wineweb: the wasm route carries no unix fds — the server designates
+     * the child's corridor slot in the new_process reply (the reply's slot
+     * word), and the child's own boot binds it. The shim's socketpair
+     * refusal keeps for any other caller (wineweb_shim.c). */
 
     /* create the process on the server side */
 
@@ -840,6 +860,11 @@ NTSTATUS WINAPI NtCreateUserProcess( HANDLE *process_handle_ptr, HANDLE *thread_
             process_handle = wine_server_ptr_handle( reply->handle );
             process_id     = reply->pid;
         }
+#ifdef __wasm__
+        /* wineweb: the designated corridor slot (the reply's own word —
+         * the corridor the child's boot binds; the wasm route). */
+        if (!status) wasm_child_slot = reply->slot;
+#endif
         process_info = wine_server_ptr_handle( reply->info );
     }
     SERVER_END_REQ;
@@ -883,7 +908,21 @@ NTSTATUS WINAPI NtCreateUserProcess( HANDLE *process_handle_ptr, HANDLE *thread_
     if (status) goto done;
 
     /* create the child process */
-
+#ifdef __wasm__
+    /* wineweb: the P69 drive-side handler (crates/wineweb-vfs/src/
+     * proc_spawn.rs — the env import the boot wiring resolves to the
+     * runtime artifact's export). The handler stages the child's boot
+     * from the params (the image read through the guest's own file
+     * surface); the embedder's drain owns the spawn — the fresh data
+     * plane, the corridor, the boot to READY are the existing
+     * multi-instance machinery's reuse. The named divergence (the
+     * slice's own): the unix route's fork+exec has no analogue here and
+     * the child's boot failure is the loud diag, not the parent's error
+     * — the wait machinery below is the design point the slice stops
+     * at (the ledger's P69 section). */
+    if ((status = wineweb_spawn_process( params, wasm_child_slot ))) goto done;
+    success = TRUE;
+#else
     if ((status = spawn_process( params, socketfd[0], unixdir, winedebug, &pe_info ))) goto done;
 
     close( socketfd[0] );
@@ -900,6 +939,7 @@ NTSTATUS WINAPI NtCreateUserProcess( HANDLE *process_handle_ptr, HANDLE *thread_
         status = reply->exit_code;
     }
     SERVER_END_REQ;
+#endif
 
     if (!success)
     {

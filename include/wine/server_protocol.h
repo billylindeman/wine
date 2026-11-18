@@ -1140,7 +1140,9 @@ struct new_process_reply
     obj_handle_t info;
     process_id_t pid;
     obj_handle_t handle;
-    char __pad_20[4];
+    unsigned int slot;   /* wineweb: the designated corridor slot (the wasm
+                            route — the pad's word named; the wire bytes
+                            unchanged) */
 };
 
 
