@@ -134,6 +134,9 @@ static HRESULT pidl_to_shellfolder(LPITEMIDLIST pidl, LPWSTR *displayname, IShel
     return hr;
 }
 
+/* TEMP(P81 dig): forward decl (the is_empty stage read). */
+static void p81dig_vtbl_slot(IShellFolder* folder, const char* stage);
+
 static BOOL shell_folder_is_empty(IShellFolder* folder)
 {
     IEnumIDList* enumidl;
@@ -142,6 +145,7 @@ static BOOL shell_folder_is_empty(IShellFolder* folder)
     /* TEMP(P80 dig): the enum stages (the P78 death site) — stripped
      * after the read. */
     ERR( "P80DIG is_empty enter folder %p\n", folder );
+    p81dig_vtbl_slot(folder, "is_empty-enter"); /* TEMP(P81 dig) */
     {
         /* TEMP(P81 dig): name the hr of the first enum (the vanish's arm). */
         HRESULT hr81 = IShellFolder_EnumObjects(folder, NULL, SHCONTF_NONFOLDERS, &enumidl);
@@ -187,6 +191,15 @@ static BOOL shell_folder_is_empty(IShellFolder* folder)
     return TRUE;
 }
 
+/* TEMP(P81 dig): the vtable's EnumObjects slot read at each stage —
+ * the corruption window's bisection. Stripped after the read. */
+static void p81dig_vtbl_slot(IShellFolder* folder, const char* stage)
+{
+    void** vtbl81 = *(void***)folder;
+    ERR( "P81DIG stage %s folder %p vtbl %p slot+0x10 %p\n",
+         stage, folder, vtbl81, vtbl81[4] );
+}
+
 /* add an individual file or folder to the menu, takes ownership of pidl */
 static struct menu_item* add_shell_item(struct menu_item* parent, LPITEMIDLIST pidl)
 {
@@ -219,7 +232,10 @@ static struct menu_item* add_shell_item(struct menu_item* parent, LPITEMIDLIST p
             IShellFolder_BindToObject(parent->folder, pidl, NULL, &IID_IShellFolder, (void *)&item->folder);
     }
 
+    if (item->folder) p81dig_vtbl_slot(item->folder, "bound"); /* TEMP(P81 dig) */
+
     himl = (HIMAGELIST)SHGetFileInfoW((LPCWSTR)pidl, 0, &sfi, sizeof(sfi), SHGFI_PIDL|SHGFI_SYSICONINDEX|SHGFI_SMALLICON);
+    if (item->folder) p81dig_vtbl_slot(item->folder, "post-SHGetFileInfoW"); /* TEMP(P81 dig) */
     if (himl)
     {
         item->icon_himl = himl;
