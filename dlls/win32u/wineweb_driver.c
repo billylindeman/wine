@@ -35,7 +35,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(wineweb);
 
 extern int32_t wineweb_drv_create_window(int32_t x, int32_t y, uint32_t w, uint32_t h,
                                          const uint8_t *title, size_t title_len,
-                                         uint64_t *out_hwnd);
+                                         int32_t topmost, uint64_t *out_hwnd);
 extern int32_t wineweb_drv_destroy_window(uint64_t hwnd);
 extern int32_t wineweb_drv_show_window(uint64_t hwnd, int32_t visible);
 extern int32_t wineweb_drv_set_text(uint64_t hwnd, const uint8_t *text, size_t text_len);
@@ -296,7 +296,15 @@ static BOOL wweb_create_drv_window( HWND hwnd )
     title_utf8[i] = 0;
 
     if (wineweb_drv_create_window( rect.left, rect.top, rect.right - rect.left,
-                                   rect.bottom - rect.top, title_utf8, i, &drv ) != 0) return FALSE;
+                                   rect.bottom - rect.top, title_utf8, i,
+                                   /* The create-time z class (the P85 composite's
+                                    * walk input): wine's own WS_EX_TOPMOST — the
+                                    * taskbar's class rides above the child band
+                                    * layer; read from win32u's own style record
+                                    * (the same source the WS_VISIBLE arm below
+                                    * reads). */
+                                   (NtUserGetWindowLongW( hwnd, GWL_EXSTYLE ) & WS_EX_TOPMOST) ? 1 : 0,
+                                   &drv ) != 0) return FALSE;
     if (!wweb_add( hwnd, drv, rect.right - rect.left, rect.bottom - rect.top ))
         { wineweb_drv_destroy_window( drv ); return FALSE; }
     /* The create-time visibility truth: pCreateWindow is the LAST driver call

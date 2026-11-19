@@ -39,7 +39,7 @@
  */
 extern int32_t wineweb_drv_create_window(int32_t x, int32_t y, uint32_t w, uint32_t h,
                                          const uint8_t *title, size_t title_len,
-                                         uint64_t *out_hwnd);
+                                         int32_t topmost, uint64_t *out_hwnd);
 extern int32_t wineweb_drv_destroy_window(uint64_t hwnd);
 extern int32_t wineweb_drv_move_window(uint64_t hwnd, int32_t x, int32_t y);
 extern int32_t wineweb_drv_resize_window(uint64_t hwnd, uint32_t w, uint32_t h);
@@ -95,7 +95,10 @@ int32_t drv_create_window(int32_t x, int32_t y, uint32_t w, uint32_t h,
                           const uint8_t *title, uint32_t title_len, uint64_t *out_hwnd)
 {
     unsigned i;
-    int32_t status = wineweb_drv_create_window(x, y, w, h, title, title_len, out_hwnd);
+    /* topmost 0: this shim's windows are the S-face test surfaces (never
+     * topmost); the real z class rides win32u's create arm (wineweb_driver.c
+     * reads GWL_EXSTYLE there — the P85 composite's walk input). */
+    int32_t status = wineweb_drv_create_window(x, y, w, h, title, title_len, 0, out_hwnd);
     if (status != 0) return status;
     for (i = 0; i < DRV_MAX_WINDOWS; i++)
     {
