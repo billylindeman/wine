@@ -142,22 +142,23 @@ static BOOL shell_folder_is_empty(IShellFolder* folder)
     /* TEMP(P80 dig): the enum stages (the P78 death site) — stripped
      * after the read. */
     ERR( "P80DIG is_empty enter folder %p\n", folder );
-    if (IShellFolder_EnumObjects(folder, NULL, SHCONTF_NONFOLDERS, &enumidl) == S_OK)
     {
-        ERR( "P80DIG is_empty: NONFOLDERS enum ok\n" );
-        if (IEnumIDList_Next(enumidl, 1, &pidl, NULL) == S_OK)
+        /* TEMP(P81 dig): name the hr of the first enum (the vanish's arm). */
+        HRESULT hr81 = IShellFolder_EnumObjects(folder, NULL, SHCONTF_NONFOLDERS, &enumidl);
+        ERR( "P80DIG is_empty: NONFOLDERS EnumObjects hr 0x%08lx enumidl %p\n", hr81, enumidl );
+        if (hr81 == S_OK && IEnumIDList_Next(enumidl, 1, &pidl, NULL) == S_OK)
         {
             ERR( "P80DIG is_empty: NONFOLDERS Next S_OK\n" );
             CoTaskMemFree(pidl);
             IEnumIDList_Release(enumidl);
             return FALSE;
         }
-        ERR( "P80DIG is_empty: NONFOLDERS Next empty\n" );
-
-        IEnumIDList_Release(enumidl);
+        if (hr81 == S_OK)
+        {
+            ERR( "P80DIG is_empty: NONFOLDERS Next empty\n" );
+            IEnumIDList_Release(enumidl);
+        }
     }
-    else ERR( "P80DIG is_empty: NONFOLDERS EnumObjects failed\n" );
-
     if (IShellFolder_EnumObjects(folder, NULL, SHCONTF_FOLDERS, &enumidl) == S_OK)
     {
         BOOL found = FALSE;
