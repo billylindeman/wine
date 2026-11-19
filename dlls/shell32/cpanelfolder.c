@@ -130,13 +130,6 @@ HRESULT WINAPI IControlPanel_Constructor(IUnknown* pUnkOuter, REFIID riid, LPVOI
     sf->pidlRoot = _ILCreateControlPanel();	/* my qualified pidl */
     sf->pUnkOuter = pUnkOuter ? pUnkOuter : (IUnknown *)&sf->IShellFolder2_iface;
 
-    /* TEMP(P81 dig): the born state — the object + the four vptrs.
-     * Stripped after the read. */
-    ERR( "P81DIG born ICPanelImpl %p vtbls %p %p %p %p pidlRoot %p\n",
-         sf, sf->IShellFolder2_iface.lpVtbl, sf->IPersistFolder2_iface.lpVtbl,
-         sf->IShellExecuteHookW_iface.lpVtbl, sf->IShellExecuteHookA_iface.lpVtbl,
-         sf->pidlRoot );
-
     if (FAILED(IShellFolder2_QueryInterface(&sf->IShellFolder2_iface, riid, ppv))) {
         IShellFolder2_Release(&sf->IShellFolder2_iface);
 	return E_NOINTERFACE;
@@ -402,7 +395,6 @@ static BOOL CreateCPanelEnumList(IEnumIDListImpl *list, DWORD dwFlags)
     HANDLE hFile;
 
     TRACE("(%p)->(flags=0x%08lx)\n", list, dwFlags);
-    ERR( "P81DIG CreateCPanelEnumList enter flags 0x%08lx\n", dwFlags ); /* TEMP(P81 dig) */
 
     /* enumerate control panel folders */
     if (dwFlags & SHCONTF_FOLDERS)
@@ -418,9 +410,7 @@ static BOOL CreateCPanelEnumList(IEnumIDListImpl *list, DWORD dwFlags)
         strcpy(p, "*.cpl");
 
         TRACE("-- (%p)-> enumerate SHCONTF_NONFOLDERS of %s\n", list, debugstr_a(szPath));
-        ERR( "P81DIG CreateCPanelEnumList: before FindFirstFileA %s\n", debugstr_a(szPath) ); /* TEMP(P81 dig) */
         hFile = FindFirstFileA(szPath, &wfd);
-        ERR( "P81DIG CreateCPanelEnumList: FindFirstFileA -> %p\n", hFile ); /* TEMP(P81 dig) */
 
         if (hFile != INVALID_HANDLE_VALUE)
         {
@@ -442,7 +432,6 @@ static BOOL CreateCPanelEnumList(IEnumIDListImpl *list, DWORD dwFlags)
         SHELL_RegisterRegistryCPanelApps(list, HKEY_CURRENT_USER,
                 "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Control Panel\\Cpls");
     }
-    ERR( "P81DIG CreateCPanelEnumList: done\n" ); /* TEMP(P81 dig) */
     return TRUE;
 }
 
@@ -454,21 +443,17 @@ static HRESULT WINAPI ISF_ControlPanel_fnEnumObjects(IShellFolder2 *iface, HWND 
 {
     ICPanelImpl *This = impl_from_IShellFolder2(iface);
     IEnumIDListImpl *list;
-    HRESULT hr81;
 
     TRACE("(%p)->(HWND=%p flags=0x%08lx pplist=%p)\n", This, hwndOwner, dwFlags, ppEnumIDList);
-    ERR( "P81DIG ISF_ControlPanel_fnEnumObjects enter flags 0x%08lx\n", dwFlags ); /* TEMP(P81 dig) */
 
     if (!(list = IEnumIDList_Constructor()))
         return E_OUTOFMEMORY;
     CreateCPanelEnumList(list, dwFlags);
     *ppEnumIDList = &list->IEnumIDList_iface;
-    hr81 = S_OK;
 
     TRACE("--(%p)->(new ID List: %p)\n", This, *ppEnumIDList);
-    ERR( "P81DIG ISF_ControlPanel_fnEnumObjects return 0x%08lx list %p\n", hr81, *ppEnumIDList ); /* TEMP(P81 dig) */
 
-    return hr81;
+    return S_OK;
 }
 
 /**************************************************************************
