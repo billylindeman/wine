@@ -3287,6 +3287,21 @@ done:
 void virtual_init(void)
 {
     void * const low_64k = (void *)0x10000;
+#ifdef __wasm__
+    /* wineweb (P80): the loader's own placements — the PEB 0x200000, the
+     * TEB 0x210000, the stack [0x120000, 0x220000) (loader.rs's fixed
+     * contract, docs/02 §8.1) — are invisible to the mem-area list, and
+     * the shim's alloc_fixed commits into the boot's plain fence
+     * reservation (wineweb_shim.c), so the DIB-class system picks marched
+     * through the stack bottom, the divert rings and the PEB edge (the
+     * P80 dig's named writer: the imagelist's DIB sections granted at
+     * 0x60000-0x110000, the blits stomping the callback pointer at
+     * 0x1924bb). Wine's own i386 shape is a floor
+     * (set_large_address_space's DOS-area block): ours moves past the
+     * placements. The p2 table stays the truth — a probe that overlaps a
+     * taken region walks. */
+    address_space_start = (void *)0x220000;
+#endif
     const struct preload_info **preload_info_ptr = dlsym( RTLD_DEFAULT, "wine_main_preload_info" );
     const struct preload_info *preload_info = preload_info_ptr ? *preload_info_ptr : NULL;
     pthread_mutexattr_t attr;
@@ -3702,12 +3717,20 @@ static void set_large_address_space(void)
 
     if (main_image_info.Machine == IMAGE_FILE_MACHINE_I386)
     {
+#ifdef __wasm__
+        /* wineweb (P80): the floor is virtual_init's (the guest layout's
+         * placements end at the stack top 0x220000) — never lower it back
+         * into the stack; the DOS-area map below must not run either (the
+         * shim's alloc_fixed commit would zero-fill the loader's stack). */
+        address_space_start = (void *)0x220000;
+#else
         /* reserve the DOS area, and make it accessible (except the low 64K)
          * to hide bugs in broken apps like Excel 2003 */
         char *end, *start = address_space_start;  /* low 64K */
         address_space_start = (void *)0x110000;
         end = min( address_space_start, main_module );
         if (end > start) map_fixed_area( start, end - start, PROT_READ | PROT_WRITE );
+#endif
     }
 
     if (is_win64)
