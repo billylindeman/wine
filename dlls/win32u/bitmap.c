@@ -261,11 +261,6 @@ LONG WINAPI NtGdiGetBitmapBits(
         const char *src_ptr = src_bits.ptr;
         int src_stride = info->bmiHeader.biSizeImage / abs( info->bmiHeader.biHeight );
 
-        /* TEMP(P80 dig): the caller-pointer destination — the 0x18Fxxx
-         * wild-write class. Loud, stripped after the read. */
-        if ((UINT_PTR)bits && (UINT_PTR)bits < 0x800000)
-            ERR( "P80DIG GetBitmapBits: WILD DST %p count %d\n", bits, count );
-
         /* GetBitmapBits returns 16-bit aligned data */
 
         if (info->bmiHeader.biHeight > 0)

@@ -31,17 +31,6 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(dib);
 
-/* TEMP(P80 dig): the wild-blit writer's trap. A DIB-class blit destination
- * below the statics band (0x800000) is the ~0x18Fxxx wild-write class —
- * the stack/PEB/TEB low fence no blit may ever target. Loud, one run,
- * stripped after the read (the P37 lesson). */
-static void p80dig_dst( const char *site, const dib_info *dst )
-{
-    if ((UINT_PTR)dst->bits.ptr && (UINT_PTR)dst->bits.ptr < 0x800000)
-        ERR( "P80DIG %s: WILD DST %p stride %d rect %s\n", site, dst->bits.ptr,
-             dst->stride, wine_dbgstr_rect( &dst->rect ));
-}
-
 #define DST 0   /* Destination dib */
 #define SRC 1   /* Source dib */
 #define TMP 2   /* Temporary dib */
@@ -489,8 +478,6 @@ static void copy_rect( dib_info *dst, const RECT *dst_rect, const dib_info *src,
     int i, count, start, end, overlap;
     DWORD and = 0, xor = 0;
 
-    p80dig_dst( "copy_rect", dst );
-
     if (clipped_rects)
     {
         rects = clipped_rects->rects;
@@ -575,8 +562,6 @@ static void mask_rect( dib_info *dst, const RECT *dst_rect, const dib_info *src,
     POINT origin;
     const RECT *rects;
     int i, count;
-
-    p80dig_dst( "mask_rect", dst );
 
     if (rop2 == R2_BLACK || rop2 == R2_NOT || rop2 == R2_NOP || rop2 == R2_WHITE)
         return copy_rect( dst, dst_rect, src, src_rect, clipped_rects, rop2 );
@@ -764,8 +749,6 @@ static DWORD execute_rop( dibdrv_physdev *pdev, const RECT *dst_rect, dib_info *
     int height = dst_rect->bottom - dst_rect->top;
     const BYTE *opcode = BITBLT_Opcodes[(rop >> 16) & 0xff];
     DWORD err;
-
-    p80dig_dst( "execute_rop", &pdev->dib );
 
     dibs[SRC] = src;
     dibs[DST] = &pdev->dib;

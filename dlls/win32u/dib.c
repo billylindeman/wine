@@ -1399,12 +1399,6 @@ INT WINAPI NtGdiGetDIBitsInternal( HDC hdc, HBITMAP hbitmap, UINT startscan, UIN
             dst_info->bmiHeader.biHeight = -src.height;
         dst_info->bmiHeader.biSizeImage = get_dib_image_size( dst_info );
 
-        /* TEMP(P80 dig): the caller-pointer destination — the 0x18Fxxx
-         * wild-write class. Loud, stripped after the read. */
-        if ((UINT_PTR)bits < 0x800000)
-            ERR( "P80DIG GetDIBitsInternal: WILD DST %p sizeImage %d\n", bits,
-                 dst_info->bmiHeader.biSizeImage );
-
         convert_bitmapinfo( src_info, src_bits.ptr, &src, dst_info, bits );
         if (src_bits.free) src_bits.free( &src_bits );
         ret = lines;

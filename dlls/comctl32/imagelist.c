@@ -333,11 +333,6 @@ IMAGELIST_InternalExpandBitmaps(HIMAGELIST himl, INT nImageCount)
     INT     nNewCount;
     SIZE    sz;
 
-    /* TEMP(P80 dig): the DIB-growth lifecycle — the himl identity + the
-     * expansion shape. Loud, stripped after the read. */
-    ERR( "P80DIG ExpandBitmaps: himl %p cur %d max %d grow %d cx %d cy %d\n",
-         himl, himl->cCurImage, himl->cMaxImage, himl->cGrow, himl->cx, himl->cy );
-
     TRACE("%p has allocated %d, max %d, grow %d images\n", himl, himl->cCurImage, himl->cMaxImage, himl->cGrow);
 
     if (himl->cCurImage + nImageCount < himl->cMaxImage)
@@ -419,10 +414,6 @@ ImageList_Add (HIMAGELIST himl,	HBITMAP hbmImage, HBITMAP hbmMask)
     TRACE("himl=%p hbmimage=%p hbmmask=%p\n", himl, hbmImage, hbmMask);
     if (!is_valid(himl))
         return -1;
-
-    /* TEMP(P80 dig): the Add route's himl identity. Loud, stripped after
-     * the read. */
-    ERR( "P80DIG ImageList_Add: himl %p cur %d max %d\n", himl, himl->cCurImage, himl->cMaxImage );
 
     if (!GetObjectW(hbmImage, sizeof(BITMAP), &bmp))
         return -1;
@@ -678,10 +669,6 @@ ImageList_Copy (HIMAGELIST himlDst, INT iDst,	HIMAGELIST himlSrc,
     POINT ptSrc, ptDst;
 
     TRACE("himlDst=%p iDst=%d himlSrc=%p iSrc=%d\n", himlDst, iDst, himlSrc, iSrc);
-
-    /* TEMP(P80 dig): the Copy route's identities. Loud, stripped after the
-     * read. */
-    ERR( "P80DIG ImageList_Copy: dst %p(%d) src %p(%d)\n", himlDst, iDst, himlSrc, iSrc );
 
     if (!is_valid(himlSrc) || !is_valid(himlDst))
 	return FALSE;
@@ -1179,11 +1166,6 @@ static BOOL alpha_blend_image( HIMAGELIST himl, HDC dest_dc, int dest_x, int des
     void *bits, *mask_bits;
     unsigned int *ptr;
     int i, j;
-
-    /* TEMP(P80 dig): the draw route's identity. Loud, stripped after the
-     * read. */
-    ERR( "P80DIG alpha_blend_image: himl %p dst_dc %p dst %d,%d %dx%d idx-style %x\n",
-         himl, dest_dc, dest_x, dest_y, cx, cy, style );
 
     func.BlendOp = AC_SRC_OVER;
     func.BlendFlags = 0;
@@ -2526,11 +2508,6 @@ ImageList_ReplaceIcon (HIMAGELIST himl, INT nIndex, HICON hIcon)
         ERR("invalid image list\n");
         return -1;
     }
-
-    /* TEMP(P80 dig): the ReplaceIcon route's himl identity. Loud, stripped
-     * after the read. */
-    ERR( "P80DIG ReplaceIcon: himl %p index %d icon %p cur %d max %d\n",
-         himl, nIndex, hIcon, himl->cCurImage, himl->cMaxImage );
     if ((nIndex >= himl->cMaxImage) || (nIndex < -1)) {
         ERR("invalid image index %d / %d\n", nIndex, himl->cMaxImage);
         return -1;

@@ -152,14 +152,6 @@ static void get_bitmap_info( ICONINFO *icon_info, BITMAP *mask, BITMAP *color, L
 static void fill_icon_info( const BITMAP *mask, const BITMAP *color, LONG mask_bits, LONG color_bits,
                             ICONINFO *icon_info, struct notify_data_icon *msg_icon_info, BYTE *image_data_buffer )
 {
-    /* TEMP(P80 dig): the tray icon's GetBitmapBits destinations — the
-     * 0x18Fxxx wild-write class. Loud, stripped after the read. */
-    if ((UINT_PTR)image_data_buffer < 0x800000)
-        ERR( "P80DIG fill_icon_info: WILD buffer %p mask_bits %ld color_bits %ld\n",
-             image_data_buffer, mask_bits, color_bits );
-    if (icon_info->hbmColor && (UINT_PTR)(image_data_buffer + mask_bits) < 0x800000)
-        ERR( "P80DIG fill_icon_info: WILD color dst %p\n", image_data_buffer + mask_bits );
-
     if (icon_info->hbmColor)
     {
         msg_icon_info->width  = color->bmWidth;
