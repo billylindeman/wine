@@ -305,3 +305,23 @@ IEnumIDListImpl *IEnumIDList_Constructor(void)
 
     return lpeidl;
 }
+
+#ifdef __wasm__ /* wineweb: the enum list's vtable seed (the P81 second \
+ * wall's second named root — the tracer: is_empty's IEnumIDList_Next on \
+ * the CPanel enum lifted the raw shell32 funcref at 0x19249f and the \
+ * drive refused — the same missing-mint class as cpanelfolder.c). The \
+ * arg bytes from shobjidl_core.idl: QI 12, AddRef 4, Release 4, \
+ * Next(iface, celt, rgelt, pceltFetched) 16, Skip(iface, celt) 8, \
+ * Reset(iface) 4, Clone(iface, ppenum) 8. */
+extern unsigned int wineweb_vtbl_mint_at( unsigned int vtbl, unsigned int slot, unsigned int fn, unsigned int arg_bytes );
+
+static const unsigned int eidl_args[] = { 12, 4, 4, 16, 8, 4, 8 };
+
+void wineweb_enumidlist_vtbl_seed(void)
+{
+    unsigned int *eidl = (unsigned int *)(void *)&eidlvt;
+    unsigned int i;
+    for (i = 0; i < ARRAY_SIZE(eidl_args); i++)
+        wineweb_vtbl_mint_at( (unsigned int)(UINT_PTR)&eidlvt, i, eidl[i], eidl_args[i] );
+}
+#endif
