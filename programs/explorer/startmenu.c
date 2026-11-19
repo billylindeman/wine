@@ -139,30 +139,22 @@ static BOOL shell_folder_is_empty(IShellFolder* folder)
     IEnumIDList* enumidl;
     LPITEMIDLIST pidl=NULL;
 
-    /* TEMP(P80 dig): the enum stages (the P78 death site) — stripped
-     * after the read. */
-    ERR( "P80DIG is_empty enter folder %p\n", folder );
     if (IShellFolder_EnumObjects(folder, NULL, SHCONTF_NONFOLDERS, &enumidl) == S_OK)
     {
-        ERR( "P80DIG is_empty: NONFOLDERS enum ok\n" );
         if (IEnumIDList_Next(enumidl, 1, &pidl, NULL) == S_OK)
         {
-            ERR( "P80DIG is_empty: NONFOLDERS Next S_OK\n" );
             CoTaskMemFree(pidl);
             IEnumIDList_Release(enumidl);
             return FALSE;
         }
-        ERR( "P80DIG is_empty: NONFOLDERS Next empty\n" );
 
         IEnumIDList_Release(enumidl);
     }
-    else ERR( "P80DIG is_empty: NONFOLDERS EnumObjects failed\n" );
 
     if (IShellFolder_EnumObjects(folder, NULL, SHCONTF_FOLDERS, &enumidl) == S_OK)
     {
         BOOL found = FALSE;
         IShellFolder *child_folder;
-        ERR( "P80DIG is_empty: FOLDERS enum ok\n" );
 
         while (!found && IEnumIDList_Next(enumidl, 1, &pidl, NULL) == S_OK)
         {
@@ -490,10 +482,6 @@ void do_startmenu(HWND hwnd)
     TPMPARAMS tpm;
     WCHAR label[64];
 
-    /* TEMP(P80 dig): the fill's stage markers (the P78 ladder's shape) —
-     * stripped after the read. */
-    ERR( "P80DIG do_startmenu enter hwnd %p\n", hwnd );
-
     destroy_menus();
 
     TRACE( "creating start menu\n" );
@@ -501,10 +489,8 @@ void do_startmenu(HWND hwnd)
     root_menu.menuhandle = public_startmenu.menuhandle = user_startmenu.menuhandle = CreatePopupMenu();
     if (!root_menu.menuhandle)
     {
-        ERR( "P80DIG do_startmenu: CreatePopupMenu failed\n" );
         return;
     }
-    ERR( "P80DIG do_startmenu: popup created\n" );
 
     user_startmenu.parent = public_startmenu.parent = &root_menu;
     user_startmenu.base = &public_startmenu;
@@ -522,24 +508,16 @@ void do_startmenu(HWND hwnd)
     if (!public_startmenu.folder)
         pidl_to_shellfolder(public_startmenu.pidl, NULL, &public_startmenu.folder);
 
-    ERR( "P80DIG do_startmenu: user folder %p public folder %p\n",
-         user_startmenu.folder, public_startmenu.folder );
     if ((user_startmenu.folder && !shell_folder_is_empty(user_startmenu.folder)) ||
         (public_startmenu.folder && !shell_folder_is_empty(public_startmenu.folder)))
     {
-        ERR( "P80DIG do_startmenu: filling the menu\n" );
         fill_menu(&user_startmenu);
 
         AppendMenuW(root_menu.menuhandle, MF_SEPARATOR, 0, NULL);
     }
-    ERR( "P80DIG do_startmenu: fill done\n" );
 
     if (SUCCEEDED(SHGetSpecialFolderLocation(NULL, CSIDL_CONTROLS, &pidl)))
-    {
-        ERR( "P80DIG do_startmenu: adding CONTROLS item\n" );
         add_shell_item(&root_menu, pidl);
-    }
-    ERR( "P80DIG do_startmenu: CONTROLS done\n" );
 
     LoadStringW(NULL, IDS_RUN, label, ARRAY_SIZE(label));
     mii.cbSize = sizeof(mii);
@@ -562,7 +540,6 @@ void do_startmenu(HWND hwnd)
     mi.fMask = MIM_STYLE;
     mi.dwStyle = MNS_NOTIFYBYPOS|MNS_NOCHECK;
     SetMenuInfo(root_menu.menuhandle, &mi);
-    ERR( "P80DIG do_startmenu: menu built, calling TrackPopupMenuEx\n" );
 
     GetWindowRect(hwnd, &rc);
 
