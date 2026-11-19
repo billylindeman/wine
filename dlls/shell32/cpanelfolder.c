@@ -1134,3 +1134,39 @@ static const IShellExecuteHookAVtbl vt_ShellExecuteHookA =
     IShellExecuteHookA_fnRelease,
     IShellExecuteHookA_fnExecute
 };
+
+#ifdef __wasm__ /* wineweb: the control panel folder's vtable seed (the P81 \
+ * second wall's named root — the tracer: is_empty's `call [eax+0x10]` on \
+ * the CPanel folder lifted the raw shell32 funcref at 0x1924bb and the \
+ * drive refused — the class's static vtables were never minted, unlike \
+ * desktop/fs/mycomp/shelllink). The same serve: the arg bytes from \
+ * shobjidl_core.idl (IShellFolder2's 20, IPersistFolder2's 6) and \
+ * shobjidl_core.idl's IShellExecuteHook (QI 12, AddRef 4, Release 4, \
+ * Execute(iface, LPSHELLEXECUTEINFOW) 8). */
+extern unsigned int wineweb_vtbl_mint_at( unsigned int vtbl, unsigned int slot, unsigned int fn, unsigned int arg_bytes );
+
+static const unsigned int cpanel_isf_args[] =
+{
+    12, 4, 4, 28, 16, 20, 20, 16, 16, 16, 28, 16, 24, 8, 8, 16, 12, 16, 16, 12
+};
+static const unsigned int cpanel_ipf_args[] = { 12, 4, 4, 8, 8, 8 };
+static const unsigned int cpanel_seh_args[] = { 12, 4, 4, 8 };
+
+void wineweb_cpanelfolder_vtbl_seed(void)
+{
+    unsigned int *isf = (unsigned int *)(void *)&vt_ShellFolder2;
+    unsigned int *ipf = (unsigned int *)(void *)&vt_PersistFolder2;
+    unsigned int *sehW = (unsigned int *)(void *)&vt_ShellExecuteHookW;
+    unsigned int *sehA = (unsigned int *)(void *)&vt_ShellExecuteHookA;
+    unsigned int i;
+    for (i = 0; i < ARRAY_SIZE(cpanel_isf_args); i++)
+        wineweb_vtbl_mint_at( (unsigned int)(UINT_PTR)&vt_ShellFolder2, i, isf[i], cpanel_isf_args[i] );
+    for (i = 0; i < ARRAY_SIZE(cpanel_ipf_args); i++)
+        wineweb_vtbl_mint_at( (unsigned int)(UINT_PTR)&vt_PersistFolder2, i, ipf[i], cpanel_ipf_args[i] );
+    for (i = 0; i < ARRAY_SIZE(cpanel_seh_args); i++)
+    {
+        wineweb_vtbl_mint_at( (unsigned int)(UINT_PTR)&vt_ShellExecuteHookW, i, sehW[i], cpanel_seh_args[i] );
+        wineweb_vtbl_mint_at( (unsigned int)(UINT_PTR)&vt_ShellExecuteHookA, i, sehA[i], cpanel_seh_args[i] );
+    }
+}
+#endif

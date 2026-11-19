@@ -1153,10 +1153,12 @@ void wineweb_shell32_vtbl_seed(void)
     extern void wineweb_desktopfolder_vtbl_seed(void);
     extern void wineweb_fsfolder_vtbl_seed(void);
     extern void wineweb_mycomp_vtbl_seed(void);
+    extern void wineweb_cpanelfolder_vtbl_seed(void);
     wineweb_shelllink_vtbl_seed();
     wineweb_desktopfolder_vtbl_seed();
     wineweb_fsfolder_vtbl_seed();
     wineweb_mycomp_vtbl_seed();
+    wineweb_cpanelfolder_vtbl_seed();
 }
 #endif
 
