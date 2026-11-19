@@ -130,6 +130,13 @@ HRESULT WINAPI IControlPanel_Constructor(IUnknown* pUnkOuter, REFIID riid, LPVOI
     sf->pidlRoot = _ILCreateControlPanel();	/* my qualified pidl */
     sf->pUnkOuter = pUnkOuter ? pUnkOuter : (IUnknown *)&sf->IShellFolder2_iface;
 
+    /* TEMP(P81 dig): the born state — the object + the four vptrs.
+     * Stripped after the read. */
+    ERR( "P81DIG born ICPanelImpl %p vtbls %p %p %p %p pidlRoot %p\n",
+         sf, sf->IShellFolder2_iface.lpVtbl, sf->IPersistFolder2_iface.lpVtbl,
+         sf->IShellExecuteHookW_iface.lpVtbl, sf->IShellExecuteHookA_iface.lpVtbl,
+         sf->pidlRoot );
+
     if (FAILED(IShellFolder2_QueryInterface(&sf->IShellFolder2_iface, riid, ppv))) {
         IShellFolder2_Release(&sf->IShellFolder2_iface);
 	return E_NOINTERFACE;
