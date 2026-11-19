@@ -3045,9 +3045,31 @@ static void update_font_system_link_info(void)
     }
 }
 
-static void update_codepage( UINT screen_dpi )
+/* P76: the codepage tables the font matching derives its charset
+ * signature from (translate_charset_info's TCI_SRCCODEPAGE route,
+ * find_matching_face's ansi_cp fallback). Wine's own update_codepage
+ * shape minus the registry writes — callable from the wasm font_init
+ * branch, which makes no registry writes. Without it the wasm tier
+ * leaves ansi_cp = {0} and every DEFAULT_CHARSET select whose face
+ * name missed bails ("can't find a single appropriate font" — the W9
+ * sysparams rows' cooking route). */
+static void init_codepage_tables( void )
 {
     USHORT utf8_hdr[2] = { 0, CP_UTF8 };
+
+    RtlInitCodePageTable( utf8_hdr, &utf8_cp );
+    if (RtlGetCurrentPeb()->AnsiCodePageData)
+        RtlInitCodePageTable( RtlGetCurrentPeb()->AnsiCodePageData, &ansi_cp );
+    else
+        ansi_cp = utf8_cp;
+    if (RtlGetCurrentPeb()->OemCodePageData)
+        RtlInitCodePageTable( RtlGetCurrentPeb()->OemCodePageData, &oem_cp );
+    else
+        oem_cp = utf8_cp;
+}
+
+static void update_codepage( UINT screen_dpi )
+{
     char value_buffer[FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data[40 * sizeof(WCHAR)])];
     KEY_VALUE_PARTIAL_INFORMATION *info = (void *)value_buffer;
     char cpbuf[40];
@@ -3064,15 +3086,7 @@ static void update_codepage( UINT screen_dpi )
     if (size == sizeof(DWORD) && info->Type == REG_DWORD)
         font_dpi = *(DWORD *)info->Data;
 
-    RtlInitCodePageTable( utf8_hdr, &utf8_cp );
-    if (RtlGetCurrentPeb()->AnsiCodePageData)
-        RtlInitCodePageTable( RtlGetCurrentPeb()->AnsiCodePageData, &ansi_cp );
-    else
-        ansi_cp = utf8_cp;
-    if (RtlGetCurrentPeb()->OemCodePageData)
-        RtlInitCodePageTable( RtlGetCurrentPeb()->OemCodePageData, &oem_cp );
-    else
-        oem_cp = utf8_cp;
+    init_codepage_tables();
     snprintf( cpbuf, sizeof(cpbuf), "%u,%u", ansi_cp.CodePage, oem_cp.CodePage );
     asciiz_to_unicode( cpbufW, cpbuf );
 
@@ -6756,9 +6770,12 @@ UINT font_init(void)
                  * branch runs only the served registry reads: the Fonts key
                  * (the miniserver's registry family, seeded by the boot)
                  * and the FontSubstitutes key — no registry writes, no
-                 * HKCU, no font-cache mutant. The codepage/dpi defaults the
-                 * non-wasm path derives stay at the 96 the stock objects
-                 * were built with. */
+                 * HKCU, no font-cache mutant. The dpi stays at the 96 the
+                 * stock objects were built with; the codepage tables the
+                 * font matching needs derive in init_codepage_tables
+                 * (the P76 serve — wine's own update_codepage shape,
+                 * minus this branch's absent registry writes). */
+    init_codepage_tables();
     if (!(font_funcs = init_freetype_lib()))
         return 96;
     load_registry_fonts();
