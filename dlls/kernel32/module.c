@@ -278,6 +278,28 @@ FARPROC get_proc_address( HMODULE hModule, LPCSTR function )
 {
     FARPROC     fp;
 
+#ifdef __wasm__ /* wineweb: the builtin pages' registry route first — the \
+    registry IS their export table (no PE export directory, docs/02 §8.2). \
+    The kernelbase loader.c seam's twin: the GUEST's own LoadLibraryW + \
+    GetProcAddress pair (startmenu.c:394-397) rides THIS copy (kernel32 owns \
+    the export, kernel32.spec:800), and without the guard the ordinal falls \
+    to LdrGetProcedureAddress's PE-image walk, which has nothing to read. \
+    The range guard keeps the real walk for the PE-backed hmods. */
+    {
+        extern unsigned int p2_thunk_window_base(void);
+        extern unsigned int p2_thunk_window_end(void);
+        extern FARPROC wineweb_GetProcAddress( HMODULE module, LPCSTR function );
+        unsigned int tb = p2_thunk_window_base();
+        unsigned int te = p2_thunk_window_end();
+        uintptr_t m = (uintptr_t)hModule;
+        if (tb && te > tb && m >= tb && m < te)
+        {
+            FARPROC builtin = wineweb_GetProcAddress( hModule, function );
+            return builtin; /* the builtin page's miss is Windows-faithful NULL */
+        }
+    }
+#endif
+
     if (!hModule) hModule = NtCurrentTeb()->Peb->ImageBaseAddress;
 
     if ((ULONG_PTR)function >> 16)
