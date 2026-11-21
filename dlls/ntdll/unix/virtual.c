@@ -1813,6 +1813,20 @@ static NTSTATUS map_fixed_area( void *base, size_t size, int unix_prot )
 
     if ((UINT_PTR)base & host_page_mask) return STATUS_CONFLICTING_ADDRESSES;
 
+    /* wineweb (P102): on a shared plane the p2 table and wine's views
+     * legitimately diverge — the drive's wine-side reservations (the
+     * footprint guards' MEM_RESERVE views, the band registrations) never
+     * touch the p2 table the shim's mmap consults, so the host mmap
+     * cannot refuse a range wine has already reserved a view for. The
+     * view check is therefore the conflict authority for the WHOLE fixed
+     * range, not only the parts the mem-areas mark allocated (the second
+     * boot's create_view otherwise walks into move_mem_areas' sibling
+     * assert — the p29-boot-probe mode-1 chain's second wall). A live
+     * view under a fixed request is the honest STATUS_CONFLICTING_ADDRESSES
+     * — the boot's own hole-registration tolerates it (boot.rs's
+     * STATUS_CONFLICTING_ADDRESSES arm). */
+    if (find_view_range( base, size )) return STATUS_CONFLICTING_ADDRESSES;
+
     start_area = find_mem_area( base );
     for (start = base, area = start_area; start < end; start = mem_area_base( ++area ))
         if (mem_area_state( area ) == AREA_BLOCKED) return STATUS_CONFLICTING_ADDRESSES;
