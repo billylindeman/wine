@@ -3287,6 +3287,21 @@ done:
 void virtual_init(void)
 {
     void * const low_64k = (void *)0x10000;
+    /* wineweb (P102): the statics band's armed law. The shared-memory data
+     * init is once per SAB (__wasm_init_memory's once-guard), so a second
+     * boot's entry sees the FIRST boot's live table (the P102 dig:
+     * mem_areas=0x37000000 count=11 — the p29-boot-probe mode-1 shape).
+     * The unguarded re-run anon_mmap_allocs a fresh table while
+     * mem_areas_count still names the live count — the count/content
+     * mismatch walks the fresh tail into move_mem_areas' capacity assert
+     * (virtual.c:317 — the mode-1 boot-fail, the 0xC1DE oracle's
+     * successor). The corridor's own armed law (ADR-0017, CORRIDOR_ARMED):
+     * the first init arms the plane's VM state — the table, the vprot map
+     * and the view blocks are the PLANE's truth (one address space, the
+     * wasm model) — and a later boot on the same plane KEEPS it. The
+     * child's own process surfaces ride the per-instance machinery
+     * (loader.rs's band, the PEB/TEB placements), never this init. */
+    if (mem_areas) return;
 #ifdef __wasm__
     /* wineweb (P80): the loader's own placements — the PEB 0x200000, the
      * TEB 0x210000, the stack [0x120000, 0x220000) (loader.rs's fixed
