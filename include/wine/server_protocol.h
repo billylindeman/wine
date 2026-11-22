@@ -897,8 +897,16 @@ struct directory_entry
     /* wineweb: the mount's real byte count (the P30k metadata-fidelity
      * thread — the miniserver's op-242 serve threads the VFS mount's
      * DirEntry::size through; the wasm linear memory bounds it below
-     * 4GiB). The file TIMES have no mount source — the honest zeros. */
+     * 4GiB). */
     data_size_t size;
+    /* wineweb: the mount's own times (the P105 attribute/time tier — the
+     * D1 #7 honest zeros retired): created/modified/accessed in wine's
+     * NT 100ns ticks (1601 epoch). The namespace objects answer zeros —
+     * no time source; the client's st fill maps change→write (the mount
+     * has no separate change source). */
+    unsigned __int64 created;
+    unsigned __int64 modified;
+    unsigned __int64 accessed;
 
 
 };
@@ -7237,6 +7245,6 @@ union generic_reply
     struct set_fd_attr_info_reply set_fd_attr_info_reply;
 };
 
-#define SERVER_PROTOCOL_VERSION 967
+#define SERVER_PROTOCOL_VERSION 968
 
 #endif /* __WINE_WINE_SERVER_PROTOCOL_H */

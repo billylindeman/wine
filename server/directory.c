@@ -582,6 +582,12 @@ DECL_HANDLER(get_directory_entries)
             entry = (struct directory_entry *)(buffer + size);
             entry->name_len = name_len;
             entry->type_len = type_name->len;
+            /* The namespace objects carry no mount record and no time
+             * source — the honest zeros (the P105 tier's record fields). */
+            entry->size = 0;
+            entry->created = 0;
+            entry->modified = 0;
+            entry->accessed = 0;
 
             size += sizeof(*entry);
             memcpy( buffer + size, name, name_len );

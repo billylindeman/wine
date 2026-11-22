@@ -2904,10 +2904,10 @@ static unsigned int get_cached_dir_data( HANDLE handle, struct dir_data **data_r
  * wineweb wire, so the client keeps its own 16-entry cache keyed by the
  * handle. Each entry carries a per-name attribute array — the kind→attribute
  * fill is decided at enumeration time (Directory → FILE_ATTRIBUTE_DIRECTORY,
- * File → FILE_ATTRIBUTE_ARCHIVE, get_file_attributes's shape) — and a
- * per-name size array (the wire record's wineweb size field: the mount's
- * REAL byte counts, threaded into the fill's st). The file TIMES have no
- * mount source and stay honest zeros. */
+ * File → FILE_ATTRIBUTE_ARCHIVE, get_file_attributes's shape) — a per-name
+ * size array (the wire record's wineweb size field: the mount's REAL byte
+ * counts, threaded into the fill's st) and — since the P105 tier — a
+ * per-name time array (the record's created/modified/accessed, NT ticks). */
 struct server_dir_cache_entry
 {
     HANDLE handle;               /* the server-held dir handle */
@@ -2915,8 +2915,9 @@ struct server_dir_cache_entry
     ULONG *attributes;           /* per-entry kind→attribute map */
     ULONG *sizes;                /* per-entry real byte counts (the wire
                                   * record's wineweb size — the mount's
-                                  * DirEntry::size; the times have no
-                                  * mount source and stay honest zeros) */
+                                  * DirEntry::size) */
+    unsigned __int64 *times;     /* per-entry [created, modified, accessed]
+                                  * NT-tick triples (the P105 tier) */
 };
 
 #define SERVER_DIR_CACHE_SIZE 16
@@ -2932,7 +2933,23 @@ struct server_wire_entry
     WCHAR short_name[13];        /* the generated short name, if any */
     ULONG attr;                  /* the kind→attribute map's fill */
     ULONG size;                  /* the wire record's real byte count */
+    unsigned __int64 times[3];   /* created/modified/accessed (the P105 tier) */
 };
+
+/* The mount's NT ticks → the st's timespec (get_file_times' inverse: the
+ * 100ns ticks split into tv_sec since 1601 + tv_nsec; the tick constants
+ * are the guest's own — TICKSPERSEC 1e7 and the 1601→1970 delta, the
+ * ntdll time.c family). Guarded to the platforms whose st carries the
+ * nanosecond fields (the wasm config's HAVE_STRUCT_STAT_ST_MTIM et al). */
+static void wire_ticks_to_timespec( unsigned __int64 ticks, struct timespec *ts )
+{
+#ifdef HAVE_STRUCT_STAT_ST_MTIM
+    ts->tv_sec  = (time_t)(ticks / 10000000 - 11644473600);
+    ts->tv_nsec = (long)((ticks % 10000000) * 100);
+#else
+    (void)ticks; (void)ts;
+#endif
+}
 
 static int server_wire_entry_compare( const void *a, const void *b )
 {
@@ -2949,9 +2966,11 @@ static void server_dir_cache_free( struct server_dir_cache_entry *entry )
     if (entry->data) free_dir_data( entry->data );
     free( entry->attributes );
     free( entry->sizes );
+    free( entry->times );
     entry->data = NULL;
     entry->attributes = NULL;
     entry->sizes = NULL;
+    entry->times = NULL;
 }
 
 /* find the cache slot for a handle, evicting round-robin on a miss */
@@ -3096,8 +3115,13 @@ static NTSTATUS server_fill_dir_data( HANDLE handle, struct server_dir_cache_ent
                 cur->attr = FILE_ATTRIBUTE_ARCHIVE;
 
             /* the mount's real byte count (the wire record's wineweb
-             * size field — server_protocol.h:893) */
+             * size field — server_protocol.h:893) and the mount's own
+             * times (the P105 tier — the record's created/modified/
+             * accessed, NT ticks) */
             cur->size = dir_entry->size;
+            cur->times[0] = dir_entry->created;
+            cur->times[1] = dir_entry->modified;
+            cur->times[2] = dir_entry->accessed;
 
             wire_count++;
             pos += entry_size;
@@ -3139,6 +3163,16 @@ static NTSTATUS server_fill_dir_data( HANDLE handle, struct server_dir_cache_ent
         free_dir_data( data );
         return STATUS_NO_MEMORY;
     }
+    if (!(entry->times = malloc( wire_count * sizeof(*entry->times) * 3 )))
+    {
+        free( attributes );
+        free( entry->sizes );
+        entry->sizes = NULL;
+        for (i = 0; i < wire_count; i++) free( wire[i].name );
+        free( wire );
+        free_dir_data( data );
+        return STATUS_NO_MEMORY;
+    }
 
     for (i = 0; i < wire_count; i++)
     {
@@ -3153,6 +3187,9 @@ static NTSTATUS server_fill_dir_data( HANDLE handle, struct server_dir_cache_ent
 
         attributes[i] = wire[i].attr;
         entry->sizes[i] = wire[i].size;
+        entry->times[i * 3 + 0] = wire[i].times[0];
+        entry->times[i * 3 + 1] = wire[i].times[1];
+        entry->times[i * 3 + 2] = wire[i].times[2];
         if (!add_dir_data_names( data, wire[i].name, wire[i].short_name, unix_name ))
         {
             free( unix_name );
@@ -3171,6 +3208,8 @@ static NTSTATUS server_fill_dir_data( HANDLE handle, struct server_dir_cache_ent
             free( attributes );
             free( entry->sizes );
             entry->sizes = NULL;
+            free( entry->times );
+            entry->times = NULL;
             free_dir_data( data );
             return STATUS_NO_MEMORY;
         }
@@ -3189,6 +3228,8 @@ oom:
     free( attributes );
     free( entry->sizes );
     entry->sizes = NULL;
+    free( entry->times );
+    entry->times = NULL;
     free_dir_data( data );
     return STATUS_NO_MEMORY;
 }
@@ -3260,16 +3301,33 @@ static NTSTATUS server_query_directory_file( HANDLE handle, IO_STATUS_BLOCK *io,
         if (restart_scan) entry->data->pos = 0;
         while (!status && entry->data->pos < entry->data->count)
         {
-            /* The per-entry stat: the mount's records carry kind, name and
-             * the real byte count (the wire record's wineweb size field) —
-             * the sizes ride the fill's st_size/st_blocks (the 512-byte
-             * allocation rounding, fill_file_info's st_blocks shape) and
-             * the kind drives st_mode; nlink 1 (the mount has no hard
-             * links). The TIMES have no mount source and stay the honest
-             * zeros. */
+            /* The per-entry stat: the mount's records carry kind, name,
+             * the real byte count (the wire record's wineweb size field)
+             * and — the P105 tier — the entry's own times. The sizes ride
+             * the fill's st_size/st_blocks (the 512-byte allocation
+             * rounding, fill_file_info's st_blocks shape), the kind
+             * drives st_mode (nlink 1 — the mount has no hard links), and
+             * the times ride st_mtim (the write), st_atim (the access)
+             * and st_ctim (the mount has no separate change source, so
+             * the change tracks the write — wine's st_ctime≈mtime shape
+             * on a filesystem without a birthtime). The record's created
+             * rides st_birthtim where the platform has one; without it
+             * wine's own fallback applies (get_file_times' `*creation =
+             * *mtime`, file.c:1977). */
             memset( &st, 0, sizeof(st) );
             st.st_size = entry->sizes[entry->data->pos];
             st.st_nlink = 1;
+#ifdef HAVE_STRUCT_STAT_ST_MTIM
+            wire_ticks_to_timespec( entry->times[entry->data->pos * 3 + 1], &st.st_mtim );
+            wire_ticks_to_timespec( entry->times[entry->data->pos * 3 + 2], &st.st_atim );
+            wire_ticks_to_timespec( entry->times[entry->data->pos * 3 + 1], &st.st_ctim );
+#endif
+#ifdef HAVE_STRUCT_STAT_ST_BIRTHTIM
+            /* The creation stamp rides the birthtime where the platform's
+             * st carries one; without it wine's own fallback applies
+             * (get_file_times' `*creation = *mtime`, file.c:1977). */
+            wire_ticks_to_timespec( entry->times[entry->data->pos * 3 + 0], &st.st_birthtim );
+#endif
             if (entry->attributes[entry->data->pos] & FILE_ATTRIBUTE_DIRECTORY)
                 st.st_mode = S_IFDIR;
             else
