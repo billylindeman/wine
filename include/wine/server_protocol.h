@@ -899,6 +899,10 @@ struct directory_entry
      * DirEntry::size through; the wasm linear memory bounds it below
      * 4GiB). */
     data_size_t size;
+    /* wineweb: the natural-alignment pad (the u64 fields' 8-byte alignment
+     * — wine's own `int __pad` convention, struct cursor_pos) — the wire
+     * layout is the C struct's own: 40 bytes before the vararg strings. */
+    unsigned int __pad;
     /* wineweb: the mount's own times (the P105 attribute/time tier — the
      * D1 #7 honest zeros retired): created/modified/accessed in wine's
      * NT 100ns ticks (1601 epoch). The namespace objects answer zeros —
@@ -7245,6 +7249,6 @@ union generic_reply
     struct set_fd_attr_info_reply set_fd_attr_info_reply;
 };
 
-#define SERVER_PROTOCOL_VERSION 968
+#define SERVER_PROTOCOL_VERSION 969
 
 #endif /* __WINE_WINE_SERVER_PROTOCOL_H */
