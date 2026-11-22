@@ -203,10 +203,7 @@ LRESULT ButtonWndProc_common(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
 
     case WM_CREATE:
         if (btn_type >= MAX_BTN_TYPE)
-        {
-            TRACE("p104-dig: button WM_CREATE abort btn_type %u style %08lx\n", btn_type, style);
             return -1; /* abort */
-        }
 
         /* XP turns a BS_USERBUTTON into BS_PUSHBUTTON */
         if (btn_type == BS_USERBUTTON ) NtUserAlterWindowStyle( hWnd, BS_TYPEMASK, BS_PUSHBUTTON );

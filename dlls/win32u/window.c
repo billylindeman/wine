@@ -6142,21 +6142,12 @@ HWND WINAPI NtUserCreateWindowEx( DWORD ex_style, UNICODE_STRING *class_name,
     else goto failed;
 
     /* send WM_CREATE */
-    TRACE("p104-dig: before WM_CREATE send for %p\n", hwnd);
     if (send_message_timeout( hwnd, WM_CREATE, 0, (LPARAM)&cs, SMTO_NORMAL, 0, ansi ) == -1)
-    {
-        TRACE("p104-dig: WM_CREATE returned -1 for %p\n", hwnd);
         goto failed;
-    }
 
     /* call the driver */
 
-    TRACE("p104-dig: before pCreateWindow for %p\n", hwnd);
-    if (!user_driver->pCreateWindow( hwnd ))
-    {
-        TRACE("p104-dig: pCreateWindow failed for %p\n", hwnd);
-        goto failed;
-    }
+    if (!user_driver->pCreateWindow( hwnd )) goto failed;
 
     NtUserNotifyWinEvent( EVENT_OBJECT_CREATE, hwnd, OBJID_WINDOW, 0 );
 

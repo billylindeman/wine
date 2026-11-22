@@ -218,7 +218,6 @@ static INT_PTR CALLBACK RunDlgProc (HWND hwnd, UINT message, WPARAM wParam, LPAR
             return TRUE ;
 
         case WM_COMMAND :
-            TRACE("p104-dig: WM_COMMAND wp=0x%08lx\n", (unsigned int)wParam);
             switch (LOWORD (wParam))
                 {
                 case IDOK :
@@ -276,11 +275,9 @@ static INT_PTR CALLBACK RunDlgProc (HWND hwnd, UINT message, WPARAM wParam, LPAR
                     WCHAR filter_exe[256], filter_all[256], filter[MAX_PATH], szCaption[MAX_PATH];
                     OPENFILENAMEW ofn;
 
-                    TRACE("p104-dig: the browse arm entered\n");
                     LoadStringW(shell32_hInstance, IDS_RUNDLG_BROWSE_FILTER_EXE, filter_exe, 256);
                     LoadStringW(shell32_hInstance, IDS_RUNDLG_BROWSE_FILTER_ALL, filter_all, 256);
                     LoadStringW(shell32_hInstance, IDS_RUNDLG_BROWSE_CAPTION, szCaption, MAX_PATH);
-                    TRACE("p104-dig: LoadStringW done exe '%s' all '%s' cap '%s'\n", debugstr_w(filter_exe), debugstr_w(filter_all), debugstr_w(szCaption));
                     swprintf( filter, MAX_PATH, L"%s%c*.exe%c%s%c*.*%c", filter_exe, 0, 0, filter_all, 0, 0 );
 
                     ZeroMemory(&ofn, sizeof(ofn));
@@ -293,10 +290,8 @@ static INT_PTR CALLBACK RunDlgProc (HWND hwnd, UINT message, WPARAM wParam, LPAR
                     ofn.Flags = OFN_ENABLESIZING | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_PATHMUSTEXIST;
                     ofn.lpstrInitialDir = prfdp->lpstrDirectory;
 
-                    TRACE("p104-dig: calling GetOpenFileNameW flags 0x%08lx\n", ofn.Flags);
                     if (GetOpenFileNameW(&ofn))
                     {
-                        TRACE("p104-dig: GetOpenFileNameW returned TRUE file '%s'\n", debugstr_w(szFName));
                         SetFocus (GetDlgItem (hwnd, IDOK)) ;
                         SetWindowTextW (GetDlgItem (hwnd, IDC_RUNDLG_EDITPATH), szFName) ;
                         SendMessageW (GetDlgItem (hwnd, IDC_RUNDLG_EDITPATH), CB_SETEDITSEL, 0, MAKELPARAM (0, -1)) ;
