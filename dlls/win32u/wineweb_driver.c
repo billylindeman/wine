@@ -45,7 +45,7 @@ extern int32_t wineweb_drv_present(void);
 
 /* --- guest-hwnd -> drv-handle mapping ------------------------------------- */
 
-#define WWEB_MAX_WINDOWS 32 /* the dialog's 8 controls + the popups ride the demo's census (S11) */
+#define WWEB_MAX_WINDOWS 64 /* the S11 census (the dialog's 8 controls + the popups) + the P104 file-dialog family (the Open dialog's 11 controls + the ComboLBox + the IME pair) — the explorer's full walk census fits with headroom */
 static struct { HWND hwnd; uint64_t drv; struct window_surface *surface; uint32_t w, h; } wweb_windows[WWEB_MAX_WINDOWS];
 
 static BOOL wweb_map(HWND hwnd, uint64_t *drv)
