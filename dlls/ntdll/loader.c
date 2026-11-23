@@ -1718,9 +1718,19 @@ NTSTATUS wineweb_ldr_register_module( const WCHAR *path, void *base, SIZE_T size
     {
         unsigned int i;
         for (i = 0; i < HASH_MAP_SIZE; i++) InitializeListHead( &hash_table[i] );
-        NtCurrentTeb()->Peb->LdrData = &ldr;
         tables_init = TRUE;
     }
+    /* wineweb (P111): the per-instance PEB wiring. The old code folded this
+     * assignment into the tables' `static BOOL tables_init` once-guard — a
+     * SHARED-plane static — so the second live instantiation's Peb->LdrData
+     * was never set (the loader's PEB is zeroed) and every Ldr walk read the
+     * NULL page's garbage list as a cyclic InLoadOrderModuleList: the wall2
+     * find_fullname_module spin (~2e9 iterations) wedged the boot's first
+     * GetModuleHandleW inside stage 13. The per-instance truth is the PEB
+     * field itself (the P110 first-heap-gates template): on native the
+     * static is per-process and the two agree by construction. */
+    if (!NtCurrentTeb()->Peb->LdrData)
+        NtCurrentTeb()->Peb->LdrData = &ldr;
     if (!(wm = RtlAllocateHeap( GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*wm) )))
     {
         RtlLeaveCriticalSection( &loader_section );
@@ -2983,7 +2993,6 @@ static NTSTATUS load_native_dll( LPCWSTR load_path, const UNICODE_STRING *nt_nam
     SIZE_T len = 0;
     NTSTATUS status = NtMapViewOfSection( mapping, NtCurrentProcess(), &module, 0, 0, NULL, &len,
                                           ViewShare, 0, PAGE_EXECUTE_READ );
-
     if (!NT_SUCCESS(status)) return status;
 
     if ((*pwm = find_existing_module( module )))  /* already loaded */
@@ -3653,7 +3662,6 @@ NTSTATUS WINAPI DECLSPEC_HOTPATCH LdrLoadDll(LPCWSTR search_path, DWORD *load_fl
     RtlEnterCriticalSection( &loader_section );
 
     nts = load_dll( path_name, dllname ? dllname : libname->Buffer, flags, &wm, FALSE );
-
     if (nts == STATUS_SUCCESS)
     {
         nts = process_attach( wm->ldr.DdagNode, NULL );
@@ -3735,7 +3743,6 @@ NTSTATUS WINAPI LdrGetDllHandleEx( ULONG flags, LPCWSTR load_path, ULONG *dll_ch
 
     status = find_dll_file( load_path, dllname ? dllname : name->Buffer,
                             &nt_name, &wm, &mapping, &image_info, &id, &redirected, TRUE );
-
     if (wm) *base = wm->ldr.DllBase;
     else
     {

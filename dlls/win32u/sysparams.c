@@ -3120,17 +3120,37 @@ HBITMAP get_display_bitmap(void)
 {
     static RECT old_virtual_rect;
     static HBITMAP hbitmap;
+#ifdef __wasm__ /* wineweb (P111): the display-bitmap cache is a SHARED-plane
+                 * static — the same class as the display_dc cache (user32's
+                 * sysparams.c); the second instantiation must not drive the
+                 * first's bitmap object. Key it on the pid (the
+                 * per-instance truth); on native the static is per-process
+                 * and the cache is untouched. */
+    static DWORD hbitmap_pid;
+    DWORD pid = (DWORD)(ULONG_PTR)NtCurrentTeb()->ClientId.UniqueProcess;
+#endif
     RECT virtual_rect;
     HBITMAP ret;
 
     virtual_rect = get_virtual_screen_rect( no_dpi, MDT_DEFAULT );
     pthread_mutex_lock( &display_dc_lock );
-    if (!EqualRect( &old_virtual_rect, &virtual_rect ))
+#ifdef __wasm__
+    if (hbitmap && hbitmap_pid != pid)
+    {
+        /* a foreign instance's cached bitmap: drop the cache (the owner's
+         * object stays valid for its own instance). */
+        hbitmap = NULL;
+    }
+#endif
+    if (!EqualRect( &old_virtual_rect, &virtual_rect ) || !hbitmap)
     {
         if (hbitmap) NtGdiDeleteObjectApp( hbitmap );
         hbitmap = NtGdiCreateBitmap( virtual_rect.right - virtual_rect.left,
                                      virtual_rect.bottom - virtual_rect.top, 1, 32, NULL );
         old_virtual_rect = virtual_rect;
+#ifdef __wasm__
+        hbitmap_pid = pid;
+#endif
     }
     ret = hbitmap;
     pthread_mutex_unlock( &display_dc_lock );

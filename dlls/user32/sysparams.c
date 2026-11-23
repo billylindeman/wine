@@ -37,6 +37,24 @@ static CRITICAL_SECTION_DEBUG critsect_debug =
 };
 static CRITICAL_SECTION display_dc_section = { &critsect_debug, -1 ,0, 0, 0, 0 };
 
+/* wineweb (P111): the display-DC cache is a SHARED-plane static. The second
+ * live instantiation inherited the first's DC handle (its own CreateDCW arm
+ * skipped: `display_dc` was already non-NULL) and drove the first
+ * instance's DC machinery from its boot — the wall2's freeze
+ * (NtGdiGetDeviceCaps on a foreign DC inside the stage-13 cursor create).
+ * Key the cache on the current process id — the per-instance truth (the
+ * P110 first-heap-gates template): the boot-tier instances share the TEB
+ * address and the fixed 4/4 ClientId shape is overridden per boot, but the
+ * second guest's pid is its own (the NEW_PROCESS assignment). On native the
+ * static is per-process and the cache is untouched. The named residual: a
+ * post-boot call from the first instance reads the second's pid — the same
+ * shared-bytes class as the P110-isolation wall; the second live guest is
+ * the p102 topology's shape, not a product route. */
+#ifdef __wasm__
+static DWORD display_dc_pid;
+#define DISPLAY_DC_OWNER() (NtCurrentTeb()->ClientId.UniqueProcess)
+#endif
+
 
 /* System parameters storage */
 static UINT system_dpi;
@@ -135,6 +153,15 @@ static void SYSPARAMS_NonClientMetrics32ATo32W( const NONCLIENTMETRICSA* lpnm32A
 HDC get_display_dc(void)
 {
     EnterCriticalSection( &display_dc_section );
+#ifdef __wasm__
+    if (display_dc && display_dc_pid != DISPLAY_DC_OWNER())
+    {
+        /* a foreign instance's cached DC: its machinery is not ours — drop
+         * the cache and create our own (the owner's DC object stays valid
+         * for its own instance; we never touch it again). */
+        display_dc = NULL;
+    }
+#endif
     if (!display_dc)
     {
         HDC dc;
@@ -145,7 +172,12 @@ HDC get_display_dc(void)
         if (display_dc)
             DeleteDC(dc);
         else
+        {
             display_dc = dc;
+#ifdef __wasm__
+            display_dc_pid = (DWORD)(ULONG_PTR)DISPLAY_DC_OWNER();
+#endif
+        }
     }
     return display_dc;
 }
