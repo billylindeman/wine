@@ -330,6 +330,25 @@ C_ASSERT( HEAP_MIN_LARGE_BLOCK_SIZE <= HEAP_INITIAL_GROW_SIZE );
 
 static struct heap *process_heap;  /* main process heap */
 
+#ifdef __wasm__
+/* wineweb: the wasm route's statics are the shared plane's bytes (the P102
+ * class — one live instance of ntdll's data per SAB). A second
+ * instantiation's RtlCreateHeap reads the FIRST boot's `process_heap`
+ * static while its own PEB.ProcessHeap is still unset (the boot stamps the
+ * PEB field only after RtlCreateHeap returns), so the shared static cannot
+ * carry the per-instance "does this process have a process heap yet"
+ * decision: the first-heap gates below ride the PEB field instead (the
+ * P110 dig's root — the HEAP_PRIVATE create's RtlInitializeCriticalSectionEx
+ * allocated the cs DebugInfo from a NULL process heap, and the resulting
+ * heap_lock(NULL) parked the boot on a refused relative-timeout select
+ * forever). On native the static is per-process, so the two agree by
+ * construction and the original paths stand. */
+static inline int heap_first_in_process(void)
+{
+    return !NtCurrentTeb()->Peb->ProcessHeap;
+}
+#endif
+
 static NTSTATUS heap_free_block_lfh( struct heap *heap, ULONG flags, struct block *block );
 
 /* check if memory range a contains memory range b */
@@ -1509,7 +1528,11 @@ HANDLE WINAPI RtlCreateHeap( ULONG flags, void *addr, SIZE_T total_size, SIZE_T 
            flags, addr, total_size, commit_size, lock, params );
 
     flags &= ~(HEAP_TAIL_CHECKING_ENABLED|HEAP_FREE_CHECKING_ENABLED);
+#ifdef __wasm__ /* wineweb: the per-instance first-heap gate (the block comment above) */
+    if (!heap_first_in_process()) flags |= HEAP_PRIVATE;
+#else
     if (process_heap) flags |= HEAP_PRIVATE;
+#endif
     if (!process_heap || !total_size || (flags & HEAP_SHARED)) flags |= HEAP_GROWABLE;
     commit_size = ROUND_SIZE( commit_size, INITIAL_COMMIT_ALIGN - 1 );
     if (!total_size) total_size = ROUND_SIZE( commit_size + 1 /* + 1 is intentional */, REGION_ALIGN - 1 );
@@ -1542,7 +1565,13 @@ HANDLE WINAPI RtlCreateHeap( ULONG flags, void *addr, SIZE_T total_size, SIZE_T 
         if (i) list_add_after( &entry[-1].entry, &entry->entry );
     }
 
+#ifdef __wasm__ /* wineweb: the per-instance first-heap gate — a create whose
+                 * process has no heap yet initializes the section by hand,
+                 * whatever the shared static says (the P102 class) */
+    if (heap_first_in_process())  /* do it by hand to avoid memory allocations */
+#else
     if (!process_heap)  /* do it by hand to avoid memory allocations */
+#endif
     {
         heap->cs.DebugInfo      = &process_heap_cs_debug;
         heap->cs.LockCount      = -1;
@@ -1584,6 +1613,21 @@ HANDLE WINAPI RtlCreateHeap( ULONG flags, void *addr, SIZE_T total_size, SIZE_T 
     }
 
     /* link it into the per-process heap list */
+#ifdef __wasm__ /* wineweb: the per-instance first-heap gate — a process's
+                 * first heap stands alone (the shared static keeps the
+                 * plane's first boot's list; the PEB field is the
+                 * per-instance record) */
+    if (!heap_first_in_process() && process_heap)
+    {
+        RtlEnterCriticalSection( &process_heap->cs );
+        list_add_head( &process_heap->entry, &heap->entry );
+        RtlLeaveCriticalSection( &process_heap->cs );
+    }
+    else if (!addr)
+    {
+        list_init( &heap->entry );
+    }
+#else
     if (process_heap)
     {
         RtlEnterCriticalSection( &process_heap->cs );
@@ -1595,6 +1639,7 @@ HANDLE WINAPI RtlCreateHeap( ULONG flags, void *addr, SIZE_T total_size, SIZE_T 
         process_heap = heap;  /* assume the first heap we create is the process main heap */
         list_init( &process_heap->entry );
     }
+#endif
 
     return heap;
 }
