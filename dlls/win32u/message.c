@@ -516,7 +516,94 @@ static LRESULT dispatch_win_proc_params( struct win_proc_params *params, size_t 
                 result = ((WNDPROC)proc)( params->hwnd, params->msg, params->wparam, params->lparam );
         }
         else
-            WARN( "wineweb: ansi WndProc dispatch reached (loud)\n" );
+        {
+            UINT_PTR aproc = (UINT_PTR)params->procA;
+            if (params->msg == WM_NCCREATE || params->msg == WM_CREATE)
+            {
+                /* wine's own WINPROC_CallProcWtoA WM_NCCREATE/WM_CREATE
+                 * case (user32 winproc.c:444-487): the A-dst proc gets a
+                 * CREATESTRUCTA with the class/name converted — the
+                 * create route's MSG_OTHER_PROCESS arm forces ansi=0
+                 * (call_window_proc) while the window's shm ansi says A
+                 * (create_window's ansi); without this the WM_NCCREATE
+                 * dispatch returns 0 and wine aborts the create
+                 * (window.c:6112 — the P68 w8 red). The MDICHILD leg
+                 * rides wine's shape too. */
+                char stack_buf[512];
+                char *buf = stack_buf;
+                CREATESTRUCTW *csW = (CREATESTRUCTW *)params->lparam;
+                CREATESTRUCTA csA = *(CREATESTRUCTA *)csW;
+                MDICREATESTRUCTA mdi_cs;
+                DWORD name_lenA = 0, name_lenW = 0, class_lenA = 0, class_lenW = 0;
+
+                if (!IS_INTRESOURCE(csW->lpszClass))
+                {
+                    class_lenW = (lstrlenW(csW->lpszClass) + 1) * sizeof(WCHAR);
+                    RtlUnicodeToMultiByteSize( &class_lenA, csW->lpszClass, class_lenW );
+                }
+                if (!IS_INTRESOURCE(csW->lpszName))
+                {
+                    name_lenW = (lstrlenW(csW->lpszName) + 1) * sizeof(WCHAR);
+                    RtlUnicodeToMultiByteSize( &name_lenA, csW->lpszName, name_lenW );
+                }
+                if (class_lenA + name_lenA > sizeof(stack_buf) &&
+                    !(buf = malloc( class_lenA + name_lenA )))
+                    result = 0;
+                else
+                {
+                    if (class_lenA)
+                    {
+                        RtlUnicodeToMultiByteN( buf, class_lenA, NULL, csW->lpszClass, class_lenW );
+                        csA.lpszClass = buf;
+                    }
+                    if (name_lenA)
+                    {
+                        RtlUnicodeToMultiByteN( buf + class_lenA, name_lenA, NULL, csW->lpszName, name_lenW );
+                        csA.lpszName = buf + class_lenA;
+                    }
+                    if (GetWindowLongW( params->hwnd, GWL_EXSTYLE ) & WS_EX_MDICHILD)
+                    {
+                        mdi_cs = *(MDICREATESTRUCTA *)csW->lpCreateParams;
+                        mdi_cs.szTitle = csA.lpszName;
+                        mdi_cs.szClass = csA.lpszClass;
+                        csA.lpCreateParams = &mdi_cs;
+                    }
+                    if (aproc >= 0x70000000u) /* the wineweb marker band rides back to its funcref (the P62 lift wall) */
+                    {
+                        extern unsigned int wineweb_proc_reverse( unsigned int marker );
+                        UINT_PTR fn = wineweb_proc_reverse( (unsigned)aproc );
+                        if (fn) result = ((WNDPROC)fn)( params->hwnd, params->msg, params->wparam, (LPARAM)&csA );
+                        else WARN( "wineweb: dispatch of unforwarded marker %08x (loud)\n", (unsigned)aproc );
+                    }
+                    else if (aproc >= 0x400000u && aproc < 0x20000000u)
+                        result = wineweb_guest_call( (unsigned)aproc, (unsigned)(UINT_PTR)params->hwnd,
+                                                     params->msg, params->wparam, (LPARAM)&csA );
+                    else
+                        result = ((WNDPROC)aproc)( params->hwnd, params->msg, params->wparam, (LPARAM)&csA );
+                    if (buf != stack_buf) free( buf );
+                }
+            }
+            else
+            {
+                /* wine's conversion-free default (user32 winproc.c:692-694):
+                 * a W-sent message with no A/W shape difference passes
+                 * verbatim to the A proc. The conversion-carrying cases
+                 * beyond the create pair (WM_SETTEXT, WM_CHAR, the LB/CB
+                 * string family) keep the named loud unroutable contract. */
+                if (aproc >= 0x70000000u) /* the wineweb marker band rides back to its funcref (the P62 lift wall) */
+                {
+                    extern unsigned int wineweb_proc_reverse( unsigned int marker );
+                    UINT_PTR fn = wineweb_proc_reverse( (unsigned)aproc );
+                    if (fn) result = ((WNDPROC)fn)( params->hwnd, params->msg, params->wparam, params->lparam );
+                    else WARN( "wineweb: dispatch of unforwarded marker %08x (loud)\n", (unsigned)aproc );
+                }
+                else if (aproc >= 0x400000u && aproc < 0x20000000u)
+                    result = wineweb_guest_call( (unsigned)aproc, (unsigned)(UINT_PTR)params->hwnd,
+                                                 params->msg, params->wparam, params->lparam );
+                else
+                    result = ((WNDPROC)aproc)( params->hwnd, params->msg, params->wparam, params->lparam );
+            }
+        }
     }
     else
     {
