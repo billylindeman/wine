@@ -68,7 +68,7 @@ BOOL is_hooked( INT id )
     while ((status = get_shared_queue( &lock, &queue_shm )) == STATUS_PENDING)
         ret = queue_shm->hooks_count[id - WH_MINHOOK] > 0;
 
-    if (status) return TRUE;
+    if (status) return FALSE; /* wineweb P107 serve 3: no shared queue = no hooks observable (wine's own semantic) */
     return ret;
 }
 
